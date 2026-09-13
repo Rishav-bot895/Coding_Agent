@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "command": "analyse",
+  "success": true,
+  "target_path": "d:\\project\\target.py",
+  "data": {
+    "functions_count": 3,
+    "classes_count": 1
+  },
+  "errors": [],
+  "limitations": [],
+  "metadata": {
+    "timestamp": "2026-09-13T22:00:00Z",
+    "python_version": "3.12.10"
+  }
+}
+

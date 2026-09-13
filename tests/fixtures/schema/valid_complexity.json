@@ -1,0 +1,16 @@
+{
+  "target": "target_script.py::process_data",
+  "time_complexity": "O(n log n)",
+  "auxiliary_space": "O(n)",
+  "output_space": "O(n)",
+  "confidence": "HIGH",
+  "is_amortized": false,
+  "is_expected": false,
+  "assumptions": [
+    "CPython list.sort uses Timsort with O(n log n) worst-case time",
+    "Auxiliary space bounded by Timsort run buffer of length n/2"
+  ],
+  "abstention_reason": null,
+  "details": "Function allocates a copy of input array and performs in-place sorting."
+}
+

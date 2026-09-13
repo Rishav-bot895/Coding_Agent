@@ -1,0 +1,17 @@
+{
+  "target": "target_script.py::process_data",
+  "import_duration_ms": 12.45,
+  "import_stdout": "",
+  "import_stderr": "",
+  "warmup_invocations": 3,
+  "measured_invocations": 10,
+  "median_latency_ms": 1.25,
+  "mean_latency_ms": 1.31,
+  "min_latency_ms": 1.18,
+  "max_latency_ms": 1.54,
+  "dispersion_ms": 0.11,
+  "python_allocations_tracemalloc_bytes": 45056,
+  "approximate_process_tree_rss_bytes": 18874368,
+  "hot_process_reused": true
+}
+

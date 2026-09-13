@@ -1,0 +1,12 @@
+{
+  "bug_description": "Off-by-one indexing error in calculate_sum loop bound",
+  "root_cause": "The range upper bound is inclusive instead of exclusive, causing IndexError on last iteration.",
+  "confidence": "HIGH",
+  "cited_evidence_ids": [
+    "syntax:clean",
+    "traceback:frame_2",
+    "ruff:B007"
+  ],
+  "rationale": "Traceback shows IndexError at line 14 when accessing array[len(array)]."
+}
+

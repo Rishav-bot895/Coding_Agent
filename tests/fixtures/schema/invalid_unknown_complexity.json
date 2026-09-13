@@ -1,0 +1,8 @@
+{
+  "target": "target_script.py::process",
+  "time_complexity": "O(n^4)",
+  "auxiliary_space": "O(n)",
+  "output_space": "O(1)",
+  "confidence": "HIGH"
+}
+
