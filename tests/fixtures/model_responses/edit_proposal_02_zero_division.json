@@ -1,0 +1,14 @@
+{
+  "target_file": "02_zero_division.py",
+  "edits": [
+    {
+      "operation": "replace",
+      "start_line": 5,
+      "end_line": 6,
+      "expected_text": "    # Bug: no check for count == 0 before division\n    return total / count",
+      "replacement_text": "    if count <= 0:\n        return 0.0\n    return total / count"
+    }
+  ],
+  "explanation": "Add guard check returning 0.0 when count is less than or equal to zero."
+}
+

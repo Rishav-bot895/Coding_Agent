@@ -1,0 +1,8 @@
+{
+  "bug_description": 12345,
+  "root_cause": "The field bug_description is an integer instead of a string",
+  "confidence": "VERY_CONFIDENT",
+  "cited_evidence_ids": "not_a_list",
+  "rationale": true
+}
+

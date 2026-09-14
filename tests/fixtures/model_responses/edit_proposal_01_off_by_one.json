@@ -1,0 +1,14 @@
+{
+  "target_file": "01_off_by_one.py",
+  "edits": [
+    {
+      "operation": "replace",
+      "start_line": 9,
+      "end_line": 9,
+      "expected_text": "    for i in range(len(numbers) + 1):",
+      "replacement_text": "    for i in range(len(numbers)):"
+    }
+  ],
+  "explanation": "Fix off-by-one error by setting loop upper bound to len(numbers)."
+}
+

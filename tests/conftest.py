@@ -6,10 +6,9 @@ and provides isolated filesystem fixtures.
 
 from __future__ import annotations
 
-import os
 import sys
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
 
 import pytest
 

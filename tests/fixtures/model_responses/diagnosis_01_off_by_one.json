@@ -1,0 +1,11 @@
+{
+  "bug_description": "Loop iterates one element past the end of the list, raising IndexError.",
+  "root_cause": "The range upper bound is len(numbers) + 1 instead of len(numbers).",
+  "confidence": "HIGH",
+  "cited_evidence_ids": [
+    "traceback:line_10",
+    "syntax:clean"
+  ],
+  "rationale": "numbers[i] raises IndexError on index len(numbers) during the final iteration of range(len(numbers) + 1)."
+}
+

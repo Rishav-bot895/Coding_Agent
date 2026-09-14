@@ -1,0 +1,11 @@
+{
+  "bug_description": "Cannot concatenate string and integer with + operator, raising TypeError.",
+  "root_cause": "prefix is a string while user_id is an int; + expects matching operand types.",
+  "confidence": "HIGH",
+  "cited_evidence_ids": [
+    "traceback:line_6",
+    "runtime:TypeError"
+  ],
+  "rationale": "CPython string concatenation requires both operands to be string instances."
+}
+

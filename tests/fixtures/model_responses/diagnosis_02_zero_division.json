@@ -1,0 +1,11 @@
+{
+  "bug_description": "Division by zero occurs when count parameter is 0.",
+  "root_cause": "Function divides total by count without validating that count is greater than zero.",
+  "confidence": "HIGH",
+  "cited_evidence_ids": [
+    "traceback:line_6",
+    "runtime:ZeroDivisionError"
+  ],
+  "rationale": "Evaluating total / count when count is 0 raises ZeroDivisionError in CPython."
+}
+
