@@ -54,6 +54,7 @@ class ParsedCliCommand:
     stdin_file: str | None = None
     target_args: list[str] = field(default_factory=list)
     input_file: str | None = None
+    keep_session: bool = False
 
 
 def parse_selector(target: str, allow_selector: bool = True) -> tuple[str, str | None]:
@@ -190,6 +191,12 @@ def create_parser() -> LocaldevArgumentParser:
         action="store_true",
         default=argparse.SUPPRESS,
         help="Output structured RFC 8259 JSON envelope instead of human-readable text.",
+    )
+    shared_options.add_argument(
+        "--keep-session",
+        action="store_true",
+        default=argparse.SUPPRESS,
+        help="Retain temporary session directory after command completion for debugging.",
     )
 
     parser = LocaldevArgumentParser(
@@ -381,6 +388,9 @@ def parse_cli_args(argv: Sequence[str]) -> ParsedCliCommand:
         raise CliUsageError("The '--apply' flag is only valid for the 'fix' command.")
 
     json_flag = bool(getattr(args, "json", False)) or ("--json" in before_sep)
+    keep_session_flag = bool(getattr(args, "keep_session", False)) or (
+        "--keep-session" in before_sep
+    )
 
     return ParsedCliCommand(
         command=args.command,
@@ -394,6 +404,7 @@ def parse_cli_args(argv: Sequence[str]) -> ParsedCliCommand:
         stdin_file=getattr(args, "stdin_file", None),
         target_args=after_sep,
         input_file=getattr(args, "input_file", None),
+        keep_session=keep_session_flag,
     )
 
 

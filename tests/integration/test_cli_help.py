@@ -14,7 +14,6 @@ import pytest
 from localdev.cli import ALL_COMMANDS, create_parser, main
 from localdev.constants import APP_NAME, APP_VERSION, EXIT_CLI_USAGE_ERROR, EXIT_SUCCESS
 
-
 # =============================================================================
 # In-Process Help Text & Snapshot Assertions
 # =============================================================================

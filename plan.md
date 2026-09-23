@@ -375,7 +375,7 @@ python -m mypy --strict localdev
 
 ## P2-T2 — Enforce the single-file target and preserve file metadata facts
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Resolve and validate the explicitly supplied target path, collecting an immutable record of absolute path, file size, SHA-256 hash, text encoding, UTF-8 BOM, newline style (CRLF vs LF), trailing newline presence, read-only status, and reparse-point/symlink status.
 
@@ -400,7 +400,7 @@ python -m mypy --strict localdev
 
 ## P2-T3 — Manage isolated session directories and strict cleanup sequence
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Create a unique session directory in `%TEMP%\localdev\session_<id>` for command metadata and execution copies, establish the architecture for same-volume replacement staging, and enforce a strict 5-stage cleanup sequence to guarantee reliable removal without Windows file-locking failures.
 
@@ -437,7 +437,7 @@ python -m mypy --strict localdev
 
 ## P2-T4 — Implement sanitized terminal and JSON reporters
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Render human-readable output to the terminal with active ANSI/VT escape sanitization, and produce a deterministic, machine-readable JSON envelope adhering to `schemas.py` that preserves raw underlying data.
 

@@ -1,0 +1,234 @@
+"""Human-readable terminal output reporter for localdev.
+
+Provides structured, sanitized terminal formatting for command results, status
+summaries, evidence citations, unified diffs, validation levels (Levels A–D),
+complexity bounds, profiling metrics, technical limitations, and actionable errors.
+Applies active ANSI/VT sanitization to all untrusted content and graceful ASCII
+fallback for Windows consoles.
+"""
+
+from __future__ import annotations
+
+import sys
+from typing import TextIO
+
+from localdev.reporting.sanitizer import safe_terminal_encode, sanitize_terminal_text
+from localdev.schemas import ValidationLevel
+
+
+class TerminalReporter:
+    """Renders structured, sanitized reports to human-facing terminal streams."""
+
+    def __init__(
+        self,
+        stream: TextIO | None = None,
+        enable_sanitization: bool = True,
+    ) -> None:
+        self.stream: TextIO = stream if stream is not None else sys.stdout
+        self.enable_sanitization: bool = enable_sanitization
+
+    def write(self, text: str) -> None:
+        """Sanitize, encode, and write text to the reporter's output stream."""
+        content = sanitize_terminal_text(text) if self.enable_sanitization else text
+        target_encoding = getattr(self.stream, "encoding", None) or "utf-8"
+        encoded = safe_terminal_encode(content, target_encoding=target_encoding)
+        self.stream.write(encoded)
+        self.stream.flush()
+
+    def print_line(self, text: str = "") -> None:
+        """Write text followed by a newline."""
+        self.write(text + "\n")
+
+    # =========================================================================
+    # Section Renderers
+    # =========================================================================
+
+    def render_header(self, command: str, target: str | None = None, success: bool = True) -> str:
+        """Render top-level command banner."""
+        status_tag = "SUCCESS" if success else "FAILED"
+        lines = [
+            f"=== localdev {command.upper()} [{status_tag}] ===",
+        ]
+        if target:
+            lines.append(f"Target: {target}")
+        lines.append("")
+        return "\n".join(lines)
+
+    def render_section(self, title: str, body: str) -> str:
+        """Render a titled section with indentation."""
+        lines = [f"--- {title} ---", body.rstrip(), ""]
+        return "\n".join(lines)
+
+    def render_evidence_list(self, title: str, items: list[str]) -> str:
+        """Render a bulleted list of evidence facts or diagnostic items."""
+        if not items:
+            return ""
+        lines = [f"--- {title} ---"]
+        for item in items:
+            lines.append(f"  • {item}")
+        lines.append("")
+        return "\n".join(lines)
+
+    def render_diff(self, diff_text: str) -> str:
+        """Render a unified diff block."""
+        if not diff_text.strip():
+            return ""
+        lines = [
+            "--- Proposed Unified Diff ---",
+            diff_text.rstrip(),
+            "",
+        ]
+        return "\n".join(lines)
+
+    def render_validation_levels(
+        self,
+        level_achieved: ValidationLevel | str,
+        checks: dict[str, bool | None],
+    ) -> str:
+        """Render empirical validation tier assessment (Levels A–D)."""
+        level_str = level_achieved.value if isinstance(level_achieved, ValidationLevel) else str(level_achieved)
+        lines = [
+            f"--- Validation Assessment [Highest Level Achieved: {level_str}] ---",
+        ]
+
+        check_descriptions = {
+            "static_valid": "Level A (Static validity: clean AST parsing, 0 new Ruff diagnostics)",
+            "failure_reproduction_removed": "Level B (Failure reproduction removed: original error no longer reproduced)",
+            "clean_execution": "Level C (Clean execution: exit code 0 under controlled limits)",
+            "behavioral_oracle_passed": "Level D (Behavioral oracle: explicit expected stdout/exit satisfied)",
+        }
+
+        for key, description in check_descriptions.items():
+            result = checks.get(key)
+            if result is True:
+                status_glyph = "[OK]"
+            elif result is False:
+                status_glyph = "[FAIL]"
+            else:
+                status_glyph = "[-]"
+            lines.append(f"  {status_glyph} {description}")
+
+        if level_str in ("B", "Level B"):
+            lines.append("  Note: Level B confirms failure signature removal, but does NOT prove correctness.")
+
+        lines.append("")
+        return "\n".join(lines)
+
+    def render_complexity_report(
+        self,
+        target: str,
+        time_comp: str,
+        aux_space: str,
+        output_space: str,
+        confidence: str,
+        assumptions: list[str],
+        details: str = "",
+        abstention_reason: str | None = None,
+    ) -> str:
+        """Render asymptotic complexity bounds and CPython runtime contract assumptions."""
+        lines = [
+            f"--- Complexity Analysis: {target} ---",
+            f"  Time Complexity:       {time_comp}",
+            f"  Auxiliary Space:       {aux_space} (transient stack/heap buffers)",
+            f"  Output Space:          {output_space} (escaping return structures)",
+            f"  Confidence:            {confidence}",
+        ]
+
+        if abstention_reason:
+            lines.append(f"  Abstention Reason:     {abstention_reason}")
+
+        if assumptions:
+            lines.append("  Assumptions:")
+            for a in assumptions:
+                lines.append(f"    • {a}")
+
+        if details.strip():
+            lines.append(f"  Details: {details.strip()}")
+
+        lines.append("")
+        return "\n".join(lines)
+
+    def render_profile_report(
+        self,
+        target: str,
+        import_ms: float,
+        latency_median_ms: float,
+        latency_dispersion_ms: float,
+        tracemalloc_bytes: int,
+        rss_bytes: int,
+        warmup_runs: int,
+        measured_runs: int,
+        hot_process: bool = True,
+    ) -> str:
+        """Render function profiling metrics separating import, latency, heap, and RSS."""
+        heap_kb = tracemalloc_bytes / 1024.0
+        rss_mb = rss_bytes / (1024.0 * 1024.0)
+
+        lines = [
+            f"--- Function Profile: {target} ---",
+            f"  Import Cost:           {import_ms:.2f} ms",
+            f"  Median Latency:        {latency_median_ms:.3f} ms (dispersion: ±{latency_dispersion_ms:.3f} ms)",
+            f"  Python Heap (Peak):    {heap_kb:.1f} KB ({tracemalloc_bytes:,} bytes, tracemalloc-tracked)",
+            f"  Worker Process RSS:    {rss_mb:.2f} MB ({rss_bytes:,} bytes, peak process tree)",
+            f"  Iterations:            {warmup_runs} warm-up, {measured_runs} measured",
+            f"  Execution Semantics:   {'Hot process (module state persistent)' if hot_process else 'Fresh process'}",
+            "",
+        ]
+        return "\n".join(lines)
+
+    def render_limitations(self, limitations: list[str]) -> str:
+        """Render explicit technical limitations or safe abstentions."""
+        if not limitations:
+            return ""
+        lines = ["--- Limitations & Abstentions ---"]
+        for lim in limitations:
+            lines.append(f"  [!] {lim}")
+        lines.append("")
+        return "\n".join(lines)
+
+    def render_errors(self, errors: list[str]) -> str:
+        """Render fatal or actionable error messages."""
+        if not errors:
+            return ""
+        lines = ["--- Errors Encountered ---"]
+        for err in errors:
+            lines.append(f"  [ERROR] {err}")
+        lines.append("")
+        return "\n".join(lines)
+
+    def render_report(
+        self,
+        command: str,
+        success: bool,
+        target_path: str | None = None,
+        summary: str | None = None,
+        evidence: list[str] | None = None,
+        diff: str | None = None,
+        validation: tuple[str, dict[str, bool | None]] | None = None,
+        limitations: list[str] | None = None,
+        errors: list[str] | None = None,
+    ) -> str:
+        """Assemble a complete sanitized terminal report string."""
+        parts: list[str] = [self.render_header(command, target=target_path, success=success)]
+
+        if summary:
+            parts.append(summary.rstrip() + "\n")
+
+        if evidence:
+            parts.append(self.render_evidence_list("Verified Evidence", evidence))
+
+        if diff:
+            parts.append(self.render_diff(diff))
+
+        if validation:
+            level, checks = validation
+            parts.append(self.render_validation_levels(level, checks))
+
+        if limitations:
+            parts.append(self.render_limitations(limitations))
+
+        if errors:
+            parts.append(self.render_errors(errors))
+
+        full_text = "\n".join(p for p in parts if p.strip())
+        return sanitize_terminal_text(full_text) if self.enable_sanitization else full_text
