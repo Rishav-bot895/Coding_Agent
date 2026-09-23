@@ -256,6 +256,8 @@ python -m mypy --strict localdev
 
 ## P1-T1 — Freeze the MVP contract, toolchain, and Runtime & Isolation Contract
 
+**Status:** done
+
 **Definition:** Record the exact personal-project scope, supported Windows 11 platform, supported Python versions, pinned toolchain/model versions, CLI surface, trust model, configuration defaults, and non-goals. Establish the Runtime and Isolation Contract defining single-target scope, runtime import behavior, filesystem/network permissions, same-volume replacement staging, and environment policies. Establish a reproducible Python package with development dependencies and test markers.
 
 **Files:** `pyproject.toml`, `README.md`, `LICENSE`, `docs/security.md`, `docs/architecture.md`, `localdev/__init__.py`, `localdev/constants.py`, `tests/conftest.py`.
@@ -283,6 +285,8 @@ python -m mypy --strict localdev
 
 ## P1-T2 — Define versioned internal and external schemas
 
+**Status:** done
+
 **Definition:** Implement strongly typed Pydantic representations and validation for diagnostics, runtime results, traceback frames, AST facts, diagnoses, edit proposals, validation reports, complexity reports, profile reports, and the top-level JSON envelope. Ensure production model schemas are intentionally simple and compatible with the pinned Ollama version.
 
 **Files:** `localdev/schemas.py`, `localdev/errors.py`, `tests/unit/test_schemas.py`, `tests/fixtures/schema/`.
@@ -308,6 +312,8 @@ python -m mypy --strict localdev
 **Acceptance:** Every subsystem exchanges validated, strongly typed structures without unstructured dictionary parsing.
 
 ## P1-T3 — Benchmark and select the local inference configuration
+
+**Status:** done
 
 **Definition:** Compare candidate quantized SLMs (one ~1.5B model such as Qwen2.5-Coder-1.5B-Instruct-Q4_K_M and one ~3B model such as Qwen2.5-Coder-3B-Instruct-Q4_K_M) served via local Ollama on the target 8 GB Windows laptop. Establish baseline latency, peak total system RAM, model residency, and diagnostic validity. Define the model lifecycle and context budget. Record exact pinned toolchain and model versions for reproducible evaluation.
 
@@ -343,6 +349,8 @@ python -m mypy --strict localdev
 
 ## P2-T1 — Build command parsing and stable exit semantics
 
+**Status:** done
+
 **Definition:** Implement the command-line interface for `info`, `detect`, `analyse`, `debug`, `fix`, `complexity`, and `profile`, enforcing exactly one positional Python source target, handling secondary argument flags, and defining stable exit codes.
 
 **Files:** `localdev/cli.py`, `localdev/reporting/exit_codes.py`, `localdev/errors.py`, `tests/unit/test_cli_parsing.py`, `tests/integration/test_cli_help.py`.
@@ -367,6 +375,8 @@ python -m mypy --strict localdev
 
 ## P2-T2 — Enforce the single-file target and preserve file metadata facts
 
+**Status:** Backlog
+
 **Definition:** Resolve and validate the explicitly supplied target path, collecting an immutable record of absolute path, file size, SHA-256 hash, text encoding, UTF-8 BOM, newline style (CRLF vs LF), trailing newline presence, read-only status, and reparse-point/symlink status.
 
 **Files:** `localdev/agent/permissions.py`, `localdev/agent/session.py`, `localdev/constants.py`, `tests/unit/test_target_validation.py`, `tests/boundary_samples/`.
@@ -389,6 +399,8 @@ python -m mypy --strict localdev
 **Acceptance:** An immutable `TargetRecord` is constructed; invalid or unsafe targets are rejected immediately.
 
 ## P2-T3 — Manage isolated session directories and strict cleanup sequence
+
+**Status:** Backlog
 
 **Definition:** Create a unique session directory in `%TEMP%\localdev\session_<id>` for command metadata and execution copies, establish the architecture for same-volume replacement staging, and enforce a strict 5-stage cleanup sequence to guarantee reliable removal without Windows file-locking failures.
 
@@ -425,6 +437,8 @@ python -m mypy --strict localdev
 
 ## P2-T4 — Implement sanitized terminal and JSON reporters
 
+**Status:** Backlog
+
 **Definition:** Render human-readable output to the terminal with active ANSI/VT escape sanitization, and produce a deterministic, machine-readable JSON envelope adhering to `schemas.py` that preserves raw underlying data.
 
 **Files:** `localdev/reporting/terminal.py`, `localdev/reporting/sanitizer.py`, `localdev/reporting/json_reporter.py`, `tests/unit/test_terminal_reporter.py`, `tests/unit/test_sanitizer.py`, `tests/unit/test_json_reporter.py`.
@@ -451,6 +465,8 @@ python -m mypy --strict localdev
 
 ## P3-T1 — Define the language adapter contract
 
+**Status:** Backlog
+
 **Definition:** Create an abstract base class defining the language adapter interface (detection confidence, syntax checking, AST fact extraction, diagnostics, execution preparation, complexity analysis, and candidate validation), and implement the Python adapter registry.
 
 **Files:** `localdev/languages/base.py`, `localdev/languages/python/adapter.py`, `localdev/agent/orchestrator.py`, `tests/unit/test_adapter_contract.py`.
@@ -472,6 +488,8 @@ python -m mypy --strict localdev
 
 ## P3-T2 — Implement layered language detection
 
+**Status:** Backlog
+
 **Definition:** Detect whether the target is supported Python using non-executing signals: file extensions (`.py`, `.pyw`), standard Python shebang lines, and syntax compilation check (`ast.parse`).
 
 **Files:** `localdev/languages/detector.py`, `localdev/languages/python/adapter.py`, `tests/unit/test_language_detector.py`, `tests/boundary_samples/languages/`.
@@ -492,6 +510,8 @@ python -m mypy --strict localdev
 **Acceptance:** Detection reliably classifies Python targets and safely abstains on unsupported or ambiguous inputs without execution.
 
 ## P3-T3 — Wire `info` and `detect` end to end
+
+**Status:** Backlog
 
 **Definition:** Integrate CLI parsing, target validation, session management, language detection, and sanitized reporting to deliver the `info` and `detect` commands.
 
@@ -516,6 +536,8 @@ python -m mypy --strict localdev
 
 ## P4-T1 — Decode and syntax-check Python without source-side effects
 
+**Status:** Backlog
+
 **Definition:** Decode the source file using PEP 263 encoding declarations (defaulting to UTF-8) and validate syntax using `compile(..., mode="exec", flags=ast.PyCF_ONLY_AST)` without importing, executing, or emitting bytecode.
 
 **Files:** `localdev/languages/python/syntax.py`, `localdev/languages/python/adapter.py`, `tests/unit/test_python_syntax.py`, `tests/bug_samples/syntax/`.
@@ -534,6 +556,8 @@ python -m mypy --strict localdev
 **Acceptance:** Syntax checking provides precise error locations deterministically with zero source or filesystem side-effects.
 
 ## P4-T2 — Extract bounded AST facts and source ranges
+
+**Status:** Backlog
 
 **Definition:** Parse valid Python AST to extract module-level functions, classes, methods, parameters, loops, branches, calls, returns, and precise 1-based line spans for context building, complexity analysis, and selector matching.
 
@@ -555,6 +579,8 @@ python -m mypy --strict localdev
 **Acceptance:** AST facts provide reliable structural anchors for context building and complexity analysis without executing code.
 
 ## P4-T3 — Run Ruff in isolated single-file mode with zero project cache pollution
+
+**Status:** Backlog
 
 **Definition:** Invoke the Ruff linter against the explicit session target copy using isolated configuration, argument lists, `shell=False`, and cache suppression (`--no-cache`), enforcing a defense-in-depth policy to ensure that `localdev` leaves zero unexpected Ruff cache artifacts in the user's target project or its relevant parent directories.
 
@@ -581,6 +607,8 @@ python -m mypy --strict localdev
 
 ## P4-T4 — Deliver the `analyse` workflow
 
+**Status:** Backlog
+
 **Definition:** Integrate syntax validation, AST fact extraction, and isolated Ruff diagnostics into the deterministic `analyse` command, formatting results for terminal and JSON output.
 
 **Files:** `localdev/agent/orchestrator.py`, `localdev/agent/evidence.py`, `localdev/cli.py`, `tests/integration/test_analyse_command.py`.
@@ -604,6 +632,8 @@ python -m mypy --strict localdev
 # Phase 5 — Basic Windows execution and traceback parsing
 
 ## P5-T1 — Build controlled execution requests and runtime environment
+
+**Status:** Backlog
 
 **Definition:** Implement subprocess request construction for target execution using argument lists, `shell=False`, the selected Python executable, flags `-E`, `-B`, and `-P`, user invocation directory as default working directory (`cwd`), and the environment variable allowlist defined in the Runtime and Isolation Contract.
 
@@ -638,6 +668,8 @@ python -m mypy --strict localdev
 
 ## P5-T2 — Capture output with timeout and byte limits
 
+**Status:** Backlog
+
 **Definition:** Execute the target subprocess while concurrently draining stdout and stderr pipes, enforcing wall-clock timeout and combined output byte limits, and preserving partial output upon breach.
 
 **Files:** `localdev/execution/runner.py`, `localdev/execution/output_capture.py`, `localdev/execution/limits.py`, `tests/windows/test_runner_limits.py`, `tests/bug_samples/runtime/`.
@@ -659,6 +691,8 @@ python -m mypy --strict localdev
 
 ## P5-T3 — Terminate the process tree with psutil fallback
 
+**Status:** Backlog
+
 **Definition:** Implement reliable descendant process discovery and termination using `psutil` as a baseline fallback mechanism, ensuring child and grandchild processes are cleaned up upon timeout or termination.
 
 **Files:** `localdev/execution/process_tree.py`, `localdev/execution/runner.py`, `tests/windows/test_process_tree.py`, `tests/boundary_samples/processes/`.
@@ -679,6 +713,8 @@ python -m mypy --strict localdev
 **Acceptance:** Standard descendant processes are reliably terminated upon execution cancellation or timeout.
 
 ## P5-T4 — Parse tracebacks and deliver `debug` execution evidence
+
+**Status:** Backlog
 
 **Definition:** Parse Python execution tracebacks into structured frames, classifying frames as target-local versus external, extracting exception type and message, normalizing session copy `__file__` paths to the canonical target, and delivering deterministic evidence for the `debug` command.
 
@@ -706,6 +742,8 @@ python -m mypy --strict localdev
 
 ## P6-T1 — Add a Windows Job Object lifecycle wrapper
 
+**Status:** Backlog
+
 **Definition:** Wrap the native Windows Job Object API via `ctypes` to enforce process-tree containment with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, handling handle management, process assignment, and nested-job environments.
 
 **Files:** `localdev/execution/windows_job.py`, `localdev/errors.py`, `tests/windows/test_windows_job.py`.
@@ -728,6 +766,8 @@ python -m mypy --strict localdev
 
 ## P6-T2 — Integrate Job Objects with safe fallback policy
 
+**Status:** Backlog
+
 **Definition:** Integrate Job Object control into the execution runner, preferring Job Objects for process containment and falling back to `psutil` when running in restricted environments, reporting the active control backend.
 
 **Files:** `localdev/execution/runner.py`, `localdev/execution/windows_job.py`, `localdev/config.py`, `tests/windows/test_job_runner_integration.py`.
@@ -747,6 +787,8 @@ python -m mypy --strict localdev
 **Acceptance:** Process containment is maximized via Job Objects while maintaining graceful, observable fallback in constrained environments.
 
 ## P6-T3 — Measure and label process-tree memory
+
+**Status:** Backlog
 
 **Definition:** Periodically sample the RSS memory of the target process tree during execution, reporting the approximate peak RSS and clearly distinguishing process RSS from Python heap allocations, Job Object limits, and external Ollama service residency.
 
@@ -778,6 +820,8 @@ python -m mypy --strict localdev
 
 ## P7-T1 — Implement the inference abstraction and Ollama client
 
+**Status:** Backlog
+
 **Definition:** Implement a local HTTP inference client for Ollama (`http://127.0.0.1:11434`), enforcing separated token budgets (2,048 context window, 1,200 prompt budget, 600 output budget, 248 application safety margin), structured JSON Schema constrained requests using simple Pydantic schemas tested against the pinned Ollama engine, application-side Pydantic validation, error handling, usage metrics capture, and model lifecycle control.
 
 **Files:** `localdev/inference/base.py`, `localdev/inference/ollama_client.py`, `localdev/config.py`, `tests/unit/test_ollama_client.py`, `tests/integration/test_ollama_smoke.py`.
@@ -804,6 +848,8 @@ python -m mypy --strict localdev
 **Acceptance:** The inference client enforces separated token budgets, grammar-constrained JSON Schema generation, and application-side validation, failing gracefully when the model is unavailable.
 
 ## P7-T2 — Build compact, boundary-safe model context within prompt budget
+
+**Status:** Backlog
 
 **Definition:** Assemble compact, bounded model prompts from deterministic facts (syntax, AST facts, normalized Ruff diagnostics, parsed traceback frames, and targeted source spans) strictly within a hard 1,200-token prompt budget (reserving 600 tokens for output and an explicit 248-token application safety margin in the 2,048-token context window) using prioritized truncation.
 
@@ -840,6 +886,8 @@ python -m mypy --strict localdev
 
 ## P7-T3 — Validate diagnosis responses and evidence grounding
 
+**Status:** Backlog
+
 **Definition:** Parse model JSON responses against the diagnosis schema via application-side Pydantic validation, verify that cited line numbers and evidence IDs match actual supplied facts, retry once on malformed output, and abstain safely if invalid.
 
 **Files:** `localdev/inference/response_validator.py`, `localdev/schemas.py`, `localdev/inference/prompts.py`, `tests/unit/test_diagnosis_validator.py`.
@@ -862,6 +910,8 @@ python -m mypy --strict localdev
 **Acceptance:** Only schema-valid, evidence-grounded diagnoses are accepted; ungrounded or malformed responses safely trigger abstention.
 
 ## P7-T4 — Integrate static and runtime diagnosis flows
+
+**Status:** Backlog
 
 **Definition:** Wire deterministic evidence collection and local SLM diagnosis into the `analyse` and `debug` command flows, presenting grounded explanations in terminal and JSON outputs.
 
@@ -886,6 +936,8 @@ python -m mypy --strict localdev
 # Phase 8 — Structured edit generation and safe application
 
 ## P8-T1 — Define and validate bounded edit proposals
+
+**Status:** Backlog
 
 **Definition:** Define and enforce a strict, unambiguous patch schema with frozen indexing rules, validating that proposals target only the single canonical file, do not overlap, and respect tight complexity bounds.
 
@@ -915,6 +967,8 @@ python -m mypy --strict localdev
 
 ## P8-T2 — Apply edits to a temporary copy and render a diff
 
+**Status:** Backlog
+
 **Definition:** Apply validated edits to an in-memory/session candidate copy of the target file, preserving original encoding, BOM, newline style, and trailing newline state, and render a standard contextual unified diff.
 
 **Files:** `localdev/patching/applier.py`, `localdev/patching/diff_renderer.py`, `tests/unit/test_patch_applier.py`, `tests/unit/test_diff_renderer.py`.
@@ -937,6 +991,8 @@ python -m mypy --strict localdev
 **Acceptance:** The candidate copy accurately reflects the approved edits with exact metadata preservation, while the original file remains unmodified.
 
 ## P8-T3 — Implement confirmed atomic replacement with native ReplaceFileW backup
+
+**Status:** Backlog
 
 **Definition:** Implement the final write stage: after validation and explicit confirmation, re-resolve the target path, reject reparse points, perform compare-before-replace SHA-256 stale-edit detection, stage the replacement candidate on the target's volume, and atomically replace the target file using Windows `ReplaceFileW` with flags set to 0, leveraging its native `lpBackupFileName` parameter for atomic backup creation.
 
@@ -979,6 +1035,8 @@ python -m mypy --strict localdev
 
 ## P8-T4 — Deliver `fix` and `--propose-fix` workflows
 
+**Status:** Backlog
+
 **Definition:** Connect diagnosis, edit proposal generation, candidate application, diff rendering, candidate validation (Phase 9), user confirmation, and atomic replacement into the `fix` command workflow.
 
 **Files:** `localdev/agent/orchestrator.py`, `localdev/cli.py`, `localdev/reporting/terminal.py`, `tests/integration/test_fix_workflow.py`.
@@ -1002,6 +1060,8 @@ python -m mypy --strict localdev
 # Phase 9 — Differential patch validation
 
 ## P9-T1 — Implement structural and Ruff baseline comparison (Validation Level A — Static validity)
+
+**Status:** Backlog
 
 **Definition:** Validate candidate syntax and compare normalized static diagnostics before and after applying the patch, certifying Validation Level A (Static validity) when syntax parses cleanly, no new diagnostics are introduced, and any targeted static finding is eliminated.
 
@@ -1029,6 +1089,8 @@ python -m mypy --strict localdev
 
 ## P9-T2 — Compare runtime failure signatures on candidate (Validation Levels B and C)
 
+**Status:** Backlog
+
 **Definition:** Execute the temporary candidate copy under identical inputs, environment, and limits as the baseline run, certifying Validation Level B (Failure reproduction removed) when the original runtime exception no longer occurs, or Validation Level C (Clean execution) when execution exits with code 0.
 
 **Files:** `localdev/agent/orchestrator.py`, `localdev/languages/python/traceback_parser.py`, `localdev/schemas.py`, `tests/integration/test_runtime_patch_validation.py`.
@@ -1052,6 +1114,8 @@ python -m mypy --strict localdev
 **Acceptance:** Runtime candidate validation cleanly differentiates between "failure reproduction removed" (Level B) and "clean execution" (Level C).
 
 ## P9-T3 — Add explicit behavioural checks (Validation Level D — Behavioral oracle)
+
+**Status:** Backlog
 
 **Definition:** Support user-supplied behavioural assertions (`--expected-stdout` exact or substring, `--expected-exit`) and certify Validation Level D (Behavioral oracle) only when the candidate satisfies the explicit oracle.
 
@@ -1079,6 +1143,8 @@ python -m mypy --strict localdev
 # Phase 10 — Static time, auxiliary-space, and output-space analysis
 
 ## P10-T1 — Define the restricted cost model, space semantics, and abstention contract
+
+**Status:** Backlog
 
 **Definition:** Establish a formal, restricted static cost model and typed schemas for time, auxiliary space, and output space based on supported CPython runtime semantics, enforcing a strict `conservative + assumption-linked + source-linked + abstention-first` contract.
 
@@ -1119,6 +1185,8 @@ python -m mypy --strict localdev
 
 ## P10-T2 — Analyse loops, nesting, built-ins, and space allocation
 
+**Status:** Backlog
+
 **Definition:** Traverse Python AST facts to evaluate iterative algorithms, combining loop nesting, recognizing common built-in operations, and formally separating auxiliary space from output space.
 
 **Files:** `localdev/languages/python/complexity.py`, `tests/unit/test_complexity_iterative.py`, `tests/complexity_samples/iterative/`.
@@ -1145,6 +1213,8 @@ python -m mypy --strict localdev
 
 ## P10-T3 — Add bounded recursion analysis and abstention
 
+**Status:** Backlog
+
 **Definition:** Recognize simple, bounded direct recursion patterns (linear decrement, binary divide-and-conquer), account for call-stack depth in auxiliary space, emit `O(2^n)` for binary branching recursion, and abstain on unsupported or dynamic recursive patterns.
 
 **Files:** `localdev/languages/python/complexity.py`, `tests/unit/test_complexity_recursion.py`, `tests/complexity_samples/recursive/`.
@@ -1166,6 +1236,8 @@ python -m mypy --strict localdev
 **Acceptance:** Supported recursive patterns receive conservative assessments, and unsupported patterns fail safely via abstention.
 
 ## P10-T4 — Deliver the `complexity` command
+
+**Status:** Backlog
 
 **Definition:** Connect AST analysis, cost models, and selector parsing to deliver the `complexity` command, providing file summaries or targeted function-level complexity with source lines, assumptions, and JSON output.
 
@@ -1192,6 +1264,8 @@ python -m mypy --strict localdev
 
 ## P11-T1 — Parse selectors and load targets via direct file loading in disposable worker
 
+**Status:** Backlog
+
 **Definition:** Parse function selectors (`file.py::function_name`) and load the target module directly from its file path using `importlib.util.spec_from_file_location` inside a disposable worker subprocess, capturing import metrics and side effects separately.
 
 **Files:** `localdev/profiling/loader.py`, `localdev/profiling/worker.py`, `localdev/languages/python/selectors.py`, `tests/unit/test_profile_selector.py`, `tests/windows/test_profile_loader.py`.
@@ -1215,6 +1289,8 @@ python -m mypy --strict localdev
 
 ## P11-T2 — Define JSON inputs and recreate them for each run
 
+**Status:** Backlog
+
 **Definition:** Parse and validate user-supplied JSON argument files (`--input`), deeply recreating fresh argument structures for every warm-up and measured run to prevent argument mutation contamination.
 
 **Files:** `localdev/profiling/benchmark.py`, `localdev/profiling/worker.py`, `tests/unit/test_profile_inputs.py`, `tests/profiling_samples/inputs/`.
@@ -1234,6 +1310,8 @@ python -m mypy --strict localdev
 **Acceptance:** Profiling arguments are safe, validated, and isolated against intra-benchmark mutation.
 
 ## P11-T3 — Measure repeated function time and Python allocations under hot-process semantics
+
+**Status:** Backlog
 
 **Definition:** Execute warm-up and measured function invocations under hot-process semantics in the worker subprocess, measuring execution time with high-resolution timers and tracking Python heap allocations with `tracemalloc`.
 
@@ -1260,6 +1338,8 @@ python -m mypy --strict localdev
 **Acceptance:** Function timing and peak tracemalloc-tracked Python memory allocations are measured reliably under clearly documented hot-process semantics.
 
 ## P11-T4 — Add parent-side process RSS sampling and deliver `profile`
+
+**Status:** Backlog
 
 **Definition:** Monitor the worker subprocess tree externally from the parent process to sample peak process RSS, integrating import metrics, function timings, peak tracemalloc-tracked Python allocations, and process RSS into the `profile` command report.
 
@@ -1291,6 +1371,8 @@ python -m mypy --strict localdev
 
 ## P12-T1 — Build the evaluation datasets and harness
 
+**Status:** Backlog
+
 **Definition:** Construct versioned, reproducible evaluation datasets and an automated evaluation harness covering deterministic correctness, SLM diagnosis, patch safety, complexity accuracy, profiling stability, and cleanup. Record exact pinned toolchain and model versions for personal-project evaluation reproducibility.
 
 **Files:** `tests/bug_samples/`, `tests/complexity_samples/`, `tests/profiling_samples/`, `tests/boundary_samples/`, `tools/evaluate.py`, `docs/evaluation.md`.
@@ -1313,6 +1395,8 @@ python -m mypy --strict localdev
 **Acceptance:** A comprehensive evaluation harness is versioned and executable offline with verifiable results.
 
 ## P12-T2 — Measure quality, safety, performance, and resource budgets
+
+**Status:** Backlog
 
 **Definition:** Execute the complete evaluation harness on native Windows 11 x64 on the target 8 GB laptop, recording accuracy, false positive rates, abstention rates, patch safety, memory usage, and execution latency.
 
@@ -1337,6 +1421,8 @@ python -m mypy --strict localdev
 
 ## P12-T3 — Optimize within the 8 GB laptop budget
 
+**Status:** Backlog
+
 **Definition:** Optimize prompt construction, memory lifecycle, process scheduling, and output limits based on evaluation findings to ensure responsive, stable operation on an 8 GB Windows laptop.
 
 **Files:** `localdev/config.py`, `localdev/agent/context_builder.py`, `localdev/inference/ollama_client.py`, `localdev/execution/limits.py`, `docs/evaluation.md`.
@@ -1357,6 +1443,8 @@ python -m mypy --strict localdev
 **Acceptance:** Workflows execute stably within the 8 GB RAM budget without out-of-memory errors or safety compromises.
 
 ## P12-T4 — Complete user, architecture, security, and operations documentation
+
+**Status:** Backlog
 
 **Definition:** Author clear, technically accurate documentation detailing installation, offline configuration, command usage, architecture, security boundaries, Runtime & Isolation Contract, validation levels, and limitations.
 
@@ -1381,6 +1469,8 @@ python -m mypy --strict localdev
 **Acceptance:** Documentation is comprehensive, technically precise, and completely transparent regarding capabilities and limitations.
 
 ## P12-T5 — Rehearse and sign off the final demonstration
+
+**Status:** Backlog
 
 **Definition:** Prepare a clean, self-contained Python demonstration fixture and deliver a structured, four-part presentation script showcasing the primary debug-and-fix workflow, static complexity, function profiling, and honest abstention.
 

@@ -57,6 +57,14 @@ class CliUsageError(LocaldevError):
         super().__init__(message, exit_code=EXIT_CLI_USAGE_ERROR)
 
 
+class MalformedSelectorError(CliUsageError):
+    """Raised when a target selector contains invalid syntax or identifiers."""
+
+
+class MultipleTargetsError(CliUsageError):
+    """Raised when multiple positional targets are supplied to a single-target command."""
+
+
 class ResourceBreachError(LocaldevError):
     """Raised when execution exceeds wall-clock timeout or output byte cap."""
 
