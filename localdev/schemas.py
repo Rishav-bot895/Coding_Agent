@@ -93,9 +93,60 @@ class ValidationLevel(str, Enum):
     LEVEL_D = "D"  # Verified behavioral correctness (oracle satisfied)
 
 
+class DetectionConfidence(str, Enum):
+    """Confidence scoring for target language detection."""
+
+    CERTAIN = "CERTAIN"
+    PROBABLE = "PROBABLE"
+    UNSUPPORTED = "UNSUPPORTED"
+
+
 # =============================================================================
 # Target & Diagnostics Schemas
 # =============================================================================
+
+
+class LanguageCapabilities(BaseModel):
+    """Static capability declaration for a language adapter."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    supports_syntax_check: bool = Field(
+        default=True, description="Whether adapter provides syntax verification."
+    )
+    supports_ast_facts: bool = Field(
+        default=True, description="Whether adapter extracts structural AST facts."
+    )
+    supports_diagnostics: bool = Field(
+        default=True, description="Whether adapter runs static linter diagnostics."
+    )
+    supports_execution: bool = Field(
+        default=True, description="Whether adapter prepares controlled subprocess execution."
+    )
+    supports_complexity: bool = Field(
+        default=True, description="Whether adapter provides static complexity bounds."
+    )
+    supports_validation: bool = Field(
+        default=True, description="Whether adapter validates candidate patches across tiers A-D."
+    )
+
+
+class DetectionResult(BaseModel):
+    """Result of non-executing target language detection."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    language: str = Field(description="Detected language identifier (e.g. 'python', 'unsupported').")
+    confidence: DetectionConfidence = Field(description="Detection confidence tier.")
+    reasons: list[str] = Field(
+        default_factory=list, description="Signals supporting detection classification."
+    )
+    matched_extension: str | None = Field(
+        default=None, description="Matched file extension if any."
+    )
+    has_shebang: bool = Field(
+        default=False, description="Whether a valid shebang line was detected."
+    )
 
 
 class TargetRecord(BaseModel):
@@ -117,6 +168,16 @@ class TargetRecord(BaseModel):
     is_reparse_point: bool = Field(
         default=False, description="Whether target is a symlink or NTFS junction."
     )
+
+
+class TargetInfoRecord(BaseModel):
+    """Structured data payload for 'localdev info' command."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    target: TargetRecord = Field(description="Target file attributes and security metadata.")
+    total_lines: int = Field(ge=0, description="Total line count in target file.")
+    detection: DetectionResult = Field(description="Non-executing language detection result.")
 
 
 class DiagnosticRecord(BaseModel):
@@ -174,6 +235,22 @@ class ErrorSignature(BaseModel):
     )
     top_target_line: int | None = Field(
         default=None, ge=1, description="Line of highest target frame in traceback."
+    )
+
+
+class ExecutionSpec(BaseModel):
+    """Prepared execution specification for running a target subprocess."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    command_args: list[str] = Field(
+        min_length=1, description="Command arguments to execute."
+    )
+    env_overrides: dict[str, str] = Field(
+        default_factory=dict, description="Environment variable overrides."
+    )
+    cwd: str | None = Field(
+        default=None, description="Working directory for subprocess execution."
     )
 
 

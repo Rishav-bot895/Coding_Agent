@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from localdev.agent.orchestrator import Orchestrator
 from localdev.agent.permissions import (
     assert_writable_target,
     validate_target,
@@ -19,6 +20,7 @@ from localdev.agent.session import (
 )
 
 __all__ = [
+    "Orchestrator",
     "Session",
     "SessionManifest",
     "assert_writable_target",

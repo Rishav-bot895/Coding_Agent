@@ -11,11 +11,8 @@ from __future__ import annotations
 import io
 from pathlib import Path
 
-import pytest
-
 from localdev.reporting.terminal import TerminalReporter
 from localdev.schemas import ValidationLevel
-
 
 # =============================================================================
 # Section Formatting & Sanitization Tests

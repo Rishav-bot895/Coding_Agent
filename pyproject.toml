@@ -73,6 +73,10 @@ warn_unreachable = true
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+exclude = [
+    "tests/boundary_samples",
+    "tests/bug_samples",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "C4", "UP"]

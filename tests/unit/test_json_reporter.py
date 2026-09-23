@@ -9,9 +9,6 @@ from __future__ import annotations
 
 import io
 import json
-from typing import Any
-
-import pytest
 
 from localdev.reporting.json_reporter import (
     create_json_envelope,
