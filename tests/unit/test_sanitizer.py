@@ -7,10 +7,7 @@ newlines, tabs, and unicode content. Verifies graceful ASCII fallback for consol
 
 from __future__ import annotations
 
-import pytest
-
 from localdev.reporting.sanitizer import safe_terminal_encode, sanitize_terminal_text
-
 
 # =============================================================================
 # Hostile Sequence Sanitization

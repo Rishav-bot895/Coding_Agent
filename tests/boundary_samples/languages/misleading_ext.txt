@@ -1,0 +1,5 @@
+# Python code inside a .txt file without shebang
+x = 10
+y = 20
+print(x + y)
+

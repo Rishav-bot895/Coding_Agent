@@ -1,0 +1,4 @@
+# Prevent git from normalizing newlines in sample files used for boundary testing
+tests/boundary_samples/* -text
+tests/boundary_samples/** -text
+

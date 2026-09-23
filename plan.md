@@ -465,7 +465,7 @@ python -m mypy --strict localdev
 
 ## P3-T1 — Define the language adapter contract
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Create an abstract base class defining the language adapter interface (detection confidence, syntax checking, AST fact extraction, diagnostics, execution preparation, complexity analysis, and candidate validation), and implement the Python adapter registry.
 
@@ -488,7 +488,7 @@ python -m mypy --strict localdev
 
 ## P3-T2 — Implement layered language detection
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Detect whether the target is supported Python using non-executing signals: file extensions (`.py`, `.pyw`), standard Python shebang lines, and syntax compilation check (`ast.parse`).
 
@@ -511,7 +511,7 @@ python -m mypy --strict localdev
 
 ## P3-T3 — Wire `info` and `detect` end to end
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Integrate CLI parsing, target validation, session management, language detection, and sanitized reporting to deliver the `info` and `detect` commands.
 

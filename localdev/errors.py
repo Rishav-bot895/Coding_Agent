@@ -120,3 +120,11 @@ class PatchApplicationError(LocaldevError):
         super().__init__(message, exit_code=EXIT_TARGET_FAILURE)
         self.edit_index = edit_index
 
+
+class UnsupportedLanguageError(AbstentionError):
+    """Raised when target file language is unsupported or ambiguous."""
+
+    def __init__(self, message: str, detected_language: str = "unsupported") -> None:
+        super().__init__(message, reason_code="UNSUPPORTED_LANGUAGE")
+        self.detected_language = detected_language
+

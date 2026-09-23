@@ -1,0 +1,4 @@
+#!/usr/bin/env python3
+# Python code inside .txt with Python shebang
+print("running valid python with shebang")
+

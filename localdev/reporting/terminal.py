@@ -13,7 +13,11 @@ import sys
 from typing import TextIO
 
 from localdev.reporting.sanitizer import safe_terminal_encode, sanitize_terminal_text
-from localdev.schemas import ValidationLevel
+from localdev.schemas import (
+    DetectionResult,
+    TargetInfoRecord,
+    ValidationLevel,
+)
 
 
 class TerminalReporter:
@@ -53,6 +57,66 @@ class TerminalReporter:
             lines.append(f"Target: {target}")
         lines.append("")
         return "\n".join(lines)
+
+    def render_info(self, info: TargetInfoRecord) -> str:
+        """Render target file attributes and language detection result."""
+        target = info.target
+        detection = info.detection
+
+        t_lines = [
+            "--- Target File Attributes ---",
+            f"  Path:                  {target.path}",
+            f"  Absolute Path:         {target.absolute_path}",
+            f"  File Size:             {target.file_size_bytes:,} bytes",
+            f"  Lines:                 {info.total_lines:,}",
+            f"  SHA-256:               {target.sha256}",
+            f"  Encoding:              {target.encoding}",
+            f"  UTF-8 BOM:             {'Yes' if target.has_bom else 'No'}",
+            f"  Newline Convention:    {target.newline_style!r}",
+            f"  Trailing Newline:      {'Yes' if target.has_trailing_newline else 'No'}",
+            f"  Read-Only Status:      {'Yes' if target.is_read_only else 'No'}",
+            f"  Reparse Point:         {'Yes' if target.is_reparse_point else 'No'}",
+            "",
+            "--- Language Detection ---",
+            f"  Language:              {detection.language}",
+            f"  Confidence:            {detection.confidence.value}",
+            f"  Matched Extension:     {detection.matched_extension or 'None'}",
+            f"  Shebang Present:       {'Yes' if detection.has_shebang else 'No'}",
+        ]
+        if detection.reasons:
+            t_lines.append("  Detection Reasons:")
+            for r in detection.reasons:
+                t_lines.append(f"    • {r}")
+        t_lines.append("")
+
+        parts = [
+            self.render_header("info", target=target.path, success=True),
+            "\n".join(t_lines),
+        ]
+        full_text = "\n".join(parts)
+        return sanitize_terminal_text(full_text) if self.enable_sanitization else full_text
+
+    def render_detect(self, target_path: str, detection: DetectionResult) -> str:
+        """Render target language detection result."""
+        d_lines = [
+            "--- Language Detection ---",
+            f"  Language:              {detection.language}",
+            f"  Confidence:            {detection.confidence.value}",
+            f"  Matched Extension:     {detection.matched_extension or 'None'}",
+            f"  Shebang Present:       {'Yes' if detection.has_shebang else 'No'}",
+        ]
+        if detection.reasons:
+            d_lines.append("  Detection Reasons:")
+            for r in detection.reasons:
+                d_lines.append(f"    • {r}")
+        d_lines.append("")
+
+        parts = [
+            self.render_header("detect", target=target_path, success=True),
+            "\n".join(d_lines),
+        ]
+        full_text = "\n".join(parts)
+        return sanitize_terminal_text(full_text) if self.enable_sanitization else full_text
 
     def render_section(self, title: str, body: str) -> str:
         """Render a titled section with indentation."""

@@ -14,6 +14,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Final, NoReturn
 
+from localdev.agent.orchestrator import Orchestrator
+from localdev.agent.permissions import validate_target
+from localdev.agent.session import Session
 from localdev.constants import (
     APP_NAME,
     APP_VERSION,
@@ -25,6 +28,13 @@ from localdev.errors import (
     LocaldevError,
     MalformedSelectorError,
     MultipleTargetsError,
+)
+from localdev.reporting.json_reporter import write_json_envelope
+from localdev.reporting.terminal import TerminalReporter
+from localdev.schemas import (
+    DetectionResult,
+    JsonEnvelope,
+    TargetInfoRecord,
 )
 
 COMMANDS_ALLOWING_SELECTORS: Final[frozenset[str]] = frozenset({"complexity", "profile"})
@@ -419,17 +429,73 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.print_help(sys.stderr)
         return EXIT_CLI_USAGE_ERROR
 
+    is_json = "--json" in argv
+    parsed: ParsedCliCommand | None = None
+
     try:
         parsed = parse_cli_args(argv)
-    except LocaldevError as exc:
-        sys.stderr.write(f"Error: {exc.message}\n")
-        return exc.exit_code
+        is_json = parsed.json_output
 
-    # Command logic will be wired in subsequent tasks (P2-T2 through P11-T4)
-    sys.stdout.write(
-        f"localdev {parsed.command}: initialized for target '{parsed.target_file}'.\n"
-    )
-    return EXIT_SUCCESS
+        # For commands not yet wired in Phase 3, preserve the stub initialization line
+        if parsed.command not in ("info", "detect"):
+            sys.stdout.write(
+                f"localdev {parsed.command}: initialized for target '{parsed.target_file}'.\n"
+            )
+            return EXIT_SUCCESS
+
+        # Validate target file
+        target_record = validate_target(parsed.target_file)
+
+        # Isolated session management with strict cleanup
+        with Session(target_record=target_record, keep_session=parsed.keep_session) as session:
+            orchestrator = Orchestrator(session=session)
+
+            if parsed.command == "info":
+                info_record = orchestrator.get_info(target_record)
+                if parsed.json_output:
+                    envelope = JsonEnvelope[TargetInfoRecord](
+                        command="info",
+                        success=True,
+                        target_path=target_record.path,
+                        data=info_record,
+                    )
+                    write_json_envelope(envelope, sys.stdout)
+                else:
+                    reporter = TerminalReporter(sys.stdout)
+                    reporter.write(reporter.render_info(info_record))
+                return EXIT_SUCCESS
+
+            if parsed.command == "detect":
+                detection = orchestrator.detect(target_record)
+                if parsed.json_output:
+                    det_envelope = JsonEnvelope[DetectionResult](
+                        command="detect",
+                        success=True,
+                        target_path=target_record.path,
+                        data=detection,
+                    )
+                    write_json_envelope(det_envelope, sys.stdout)
+                else:
+                    reporter = TerminalReporter(sys.stdout)
+                    reporter.write(reporter.render_detect(target_record.path, detection))
+                return EXIT_SUCCESS
+
+        return EXIT_SUCCESS
+
+    except LocaldevError as exc:
+        if is_json:
+            cmd_name = parsed.command if parsed is not None else "unknown"
+            target_name = parsed.target_file if parsed is not None else None
+            err_envelope = JsonEnvelope[None](
+                command=cmd_name,
+                success=False,
+                target_path=target_name,
+                errors=[exc.message],
+            )
+            write_json_envelope(err_envelope, sys.stdout)
+        else:
+            sys.stderr.write(f"Error: {exc.message}\n")
+        return exc.exit_code
 
 
 if __name__ == "__main__":
