@@ -16,6 +16,7 @@ from localdev.languages.base import (
     get_default_registry,
 )
 from localdev.schemas import (
+    AnalysisReport,
     ASTFacts,
     ComplexityReport,
     DetectionConfidence,
@@ -140,6 +141,16 @@ class Orchestrator:
         """Run isolated static analysis diagnostics using the resolved language adapter."""
         adapter = self.resolve_adapter(target, source_text=source_text)
         return adapter.run_diagnostics(target, source_text=source_text)
+
+    def analyse(
+        self,
+        target: TargetRecord,
+        source_text: str | None = None,
+    ) -> AnalysisReport:
+        """Run the deterministic analyse workflow for a target file."""
+        from localdev.agent.evidence import collect_analysis_evidence
+
+        return collect_analysis_evidence(self, target, source_text=source_text)
 
     def prepare_execution(
         self,

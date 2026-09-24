@@ -1,0 +1,1 @@
+raise RuntimeError("DANGEROUS_SIDE_EFFECT_EXECUTED")

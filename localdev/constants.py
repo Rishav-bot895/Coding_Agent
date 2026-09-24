@@ -39,6 +39,7 @@ FALLBACK_MODEL: Final[str] = "qwen2.5-coder:1.5b-instruct-q4_K_M"
 # -----------------------------------------------------------------------------
 MAX_SOURCE_SIZE_BYTES: Final[int] = 256 * 1024  # 256 KB
 DEFAULT_TIMEOUT_SECONDS: Final[float] = 10.0
+DEFAULT_RUFF_TIMEOUT_SECONDS: Final[float] = 5.0
 DEFAULT_OUTPUT_BYTE_CAP: Final[int] = 512 * 1024  # 512 KB combined stdout/stderr
 PROCESS_MEMORY_SAMPLE_INTERVAL_MS: Final[int] = 20
 
