@@ -15,17 +15,24 @@ from localdev.execution.runner import (
     build_execution_request,
     run_execution_request,
 )
+from localdev.execution.windows_job import (
+    WindowsJobObject,
+    can_create_job_object,
+)
 
 __all__ = [
     "ExecutionLimits",
     "ExecutionRequest",
     "OutputCollector",
     "PipeDrainer",
+    "WindowsJobObject",
     "build_clean_environment",
     "build_execution_request",
+    "can_create_job_object",
     "get_descendant_processes",
     "is_allowed_env_var",
     "is_process_running",
     "run_execution_request",
     "terminate_process_tree",
 ]
+

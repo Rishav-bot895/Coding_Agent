@@ -68,6 +68,8 @@ class ParsedCliCommand:
     target_args: list[str] = field(default_factory=list)
     input_file: str | None = None
     keep_session: bool = False
+    timeout: float | None = None
+
 
 
 def parse_selector(target: str, allow_selector: bool = True) -> tuple[str, str | None]:
@@ -281,6 +283,11 @@ def create_parser() -> LocaldevArgumentParser:
         "--stdin-file",
         help="Path to file supplying stdin for execution.",
     )
+    p_debug.add_argument(
+        "--timeout",
+        type=float,
+        help="Maximum execution duration in seconds before termination.",
+    )
 
     # fix
     p_fix = subparsers.add_parser(
@@ -418,6 +425,7 @@ def parse_cli_args(argv: Sequence[str]) -> ParsedCliCommand:
         target_args=after_sep,
         input_file=getattr(args, "input_file", None),
         keep_session=keep_session_flag,
+        timeout=getattr(args, "timeout", None),
     )
 
 
@@ -440,7 +448,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         is_json = parsed.json_output
 
         # For commands not yet wired, preserve the stub initialization line
-        if parsed.command not in ("info", "detect", "analyse"):
+        if parsed.command not in ("info", "detect", "analyse", "debug"):
             sys.stdout.write(
                 f"localdev {parsed.command}: initialized for target '{parsed.target_file}'.\n"
             )
@@ -498,6 +506,38 @@ def main(argv: Sequence[str] | None = None) -> int:
                     reporter = TerminalReporter(sys.stdout)
                     reporter.write(reporter.render_analyse(analysis_report))
                 return EXIT_SUCCESS if analysis_report.syntax_valid else EXIT_TARGET_FAILURE
+
+            if parsed.command == "debug":
+                exec_result = orchestrator.debug(
+                    target=target_record,
+                    target_args=parsed.target_args,
+                    stdin_file=parsed.stdin_file,
+                    timeout=parsed.timeout,
+                )
+                is_success = exec_result.exit_code == 0 and not exec_result.timed_out
+                if parsed.json_output:
+                    errors_list: list[str] = []
+                    if exec_result.error_signature:
+                        errors_list.append(
+                            f"{exec_result.error_signature.exception_type}: {exec_result.error_signature.normalized_message}"
+                        )
+                    elif exec_result.timed_out:
+                        errors_list.append(f"Execution timed out after {exec_result.duration_seconds:.1f}s")
+                    elif exec_result.exit_code != 0:
+                        errors_list.append(f"Process exited with code {exec_result.exit_code}")
+
+                    debug_envelope = JsonEnvelope[ExecutionResult](
+                        command="debug",
+                        success=is_success,
+                        target_path=target_record.path,
+                        data=exec_result,
+                        errors=errors_list,
+                    )
+                    write_json_envelope(debug_envelope, sys.stdout)
+                else:
+                    reporter = TerminalReporter(sys.stdout)
+                    reporter.write(reporter.render_debug(target_record.path, exec_result))
+                return EXIT_SUCCESS if is_success else EXIT_TARGET_FAILURE
 
         return EXIT_SUCCESS
 

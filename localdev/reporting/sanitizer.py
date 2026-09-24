@@ -126,3 +126,7 @@ def safe_terminal_encode(text: str, target_encoding: str = "utf-8") -> str:
         except LookupError:
             return substituted.encode("ascii", errors="replace").decode("ascii")
 
+
+strip_ansi = sanitize_terminal_text
+
+

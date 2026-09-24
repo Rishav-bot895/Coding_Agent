@@ -11,8 +11,8 @@ In accordance with the Runtime and Isolation Contract:
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import re
+from pathlib import Path
 
 from localdev.reporting.sanitizer import strip_ansi
 from localdev.schemas import ErrorSignature, TracebackFrame
@@ -45,7 +45,7 @@ def normalize_frame_path(
     target_str = str(target_path)
     try:
         norm_raw = os.path.normcase(os.path.abspath(raw_path))
-    except Exception:
+    except (OSError, ValueError):
         norm_raw = os.path.normcase(raw_path)
 
     # Check if frame matches relocated temporary session copy
@@ -54,16 +54,16 @@ def normalize_frame_path(
             norm_session = os.path.normcase(os.path.abspath(str(session_target_path)))
             if norm_raw == norm_session:
                 return target_str, True
-        except Exception:
-            pass
+        except (OSError, ValueError):
+            norm_session = None
 
     # Check if frame matches canonical target path
     try:
         norm_target = os.path.normcase(os.path.abspath(target_str))
         if norm_raw == norm_target:
             return target_str, True
-    except Exception:
-        pass
+    except (OSError, ValueError):
+        norm_target = None
 
     # Match by simple filename if raw_path is relative or session filename
     if session_target_path is not None and Path(raw_path).name == Path(session_target_path).name:
@@ -149,7 +149,7 @@ def parse_traceback(
             continue
 
         # 3. Match Exception line at root (not indented)
-        if not line.startswith(" ") and not line.startswith("\t"):
+        if not line.startswith((" ", "\t")):
             exc_match = EXCEPTION_PATTERN.match(line)
             if exc_match:
                 flush_frame()
@@ -158,9 +158,7 @@ def parse_traceback(
                 # Accumulate any multiline exception message
                 msg_lines = [raw_msg]
                 lookahead = idx + 1
-                while lookahead < total_lines and (
-                    lines[lookahead].startswith(" ") or lines[lookahead].startswith("\t")
-                ):
+                while lookahead < total_lines and lines[lookahead].startswith((" ", "\t")):
                     msg_lines.append(lines[lookahead].strip())
                     lookahead += 1
                 last_exc_msg = " ".join(part for part in msg_lines if part).strip()
@@ -168,7 +166,7 @@ def parse_traceback(
                 continue
 
         # 4. If inside a frame header, collect source code lines
-        if current_frame_header is not None and (line.startswith(" ") or line.startswith("\t")):
+        if current_frame_header is not None and line.startswith((" ", "\t")):
             current_code_lines.append(line.strip())
 
         idx += 1

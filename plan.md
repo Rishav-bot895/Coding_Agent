@@ -742,7 +742,7 @@ python -m mypy --strict localdev
 
 ## P6-T1 — Add a Windows Job Object lifecycle wrapper
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Wrap the native Windows Job Object API via `ctypes` to enforce process-tree containment with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, handling handle management, process assignment, and nested-job environments.
 
@@ -766,7 +766,7 @@ python -m mypy --strict localdev
 
 ## P6-T2 — Integrate Job Objects with safe fallback policy
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Integrate Job Object control into the execution runner, preferring Job Objects for process containment and falling back to `psutil` when running in restricted environments, reporting the active control backend.
 

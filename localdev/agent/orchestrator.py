@@ -6,6 +6,7 @@ semantics by routing all language operations through the LanguageAdapter contrac
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
 from localdev.agent.session import Session
@@ -151,6 +152,25 @@ class Orchestrator:
         from localdev.agent.evidence import collect_analysis_evidence
 
         return collect_analysis_evidence(self, target, source_text=source_text)
+
+    def debug(
+        self,
+        target: TargetRecord,
+        target_args: Sequence[str] | None = None,
+        stdin_file: str | Path | None = None,
+        timeout: float | None = None,
+    ) -> ExecutionResult:
+        """Run the deterministic debug execution and traceback evidence workflow."""
+        from localdev.agent.evidence import collect_debug_evidence
+
+        return collect_debug_evidence(
+            self,
+            target,
+            target_args=target_args,
+            stdin_file=stdin_file,
+            timeout=timeout,
+        )
+
 
     def prepare_execution(
         self,

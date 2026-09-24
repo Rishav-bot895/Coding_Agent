@@ -136,3 +136,33 @@ class UnsupportedLanguageError(AbstentionError):
         super().__init__(message, reason_code="UNSUPPORTED_LANGUAGE")
         self.detected_language = detected_language
 
+
+class JobObjectError(LocaldevError):
+    """Base exception for Windows Job Object operational failures."""
+
+    def __init__(self, message: str, win_error_code: int | None = None) -> None:
+        super().__init__(message, exit_code=EXIT_TARGET_FAILURE)
+        self.win_error_code = win_error_code
+
+
+class JobObjectCreationError(JobObjectError):
+    """Raised when CreateJobObjectW fails."""
+
+
+class JobObjectConfigurationError(JobObjectError):
+    """Raised when SetInformationJobObject fails."""
+
+
+class JobObjectAssignmentError(JobObjectError):
+    """Raised when AssignProcessToJobObject fails (e.g., nested job restriction)."""
+
+    def __init__(
+        self,
+        message: str,
+        win_error_code: int | None = None,
+        is_nested_restriction: bool = False,
+    ) -> None:
+        super().__init__(message, win_error_code=win_error_code)
+        self.is_nested_restriction = is_nested_restriction
+
+

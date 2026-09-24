@@ -16,6 +16,7 @@ from localdev.reporting.sanitizer import safe_terminal_encode, sanitize_terminal
 from localdev.schemas import (
     AnalysisReport,
     DetectionResult,
+    ExecutionResult,
     TargetInfoRecord,
     ValidationLevel,
 )
@@ -193,6 +194,69 @@ class TerminalReporter:
                 diag_lines.append("  Status:                CLEAN (zero diagnostic findings)")
             diag_lines.append("")
             parts.append("\n".join(diag_lines))
+
+        full_text = "\n".join(parts)
+        return sanitize_terminal_text(full_text) if self.enable_sanitization else full_text
+
+    def render_debug(self, target_path: str, result: ExecutionResult) -> str:
+        """Render deterministic execution and traceback evidence report."""
+        success = (result.exit_code == 0 and not result.timed_out)
+
+        parts: list[str] = [
+            self.render_header("debug", target=target_path, success=success),
+        ]
+
+        # 1. Execution Summary Section
+        summary_lines = ["--- Execution Summary ---"]
+        status_str = "SUCCESS" if success else ("TIMED OUT" if result.timed_out else "FAILED")
+        summary_lines.append(f"  Status:                {status_str}")
+        summary_lines.append(f"  Exit Code:             {result.exit_code}")
+        summary_lines.append(f"  Duration:              {result.duration_seconds:.3f}s")
+        if result.timed_out:
+            summary_lines.append("  Timed Out:             YES")
+        if result.output_truncated:
+            summary_lines.append("  Output Truncated:      YES (byte cap breached)")
+        summary_lines.append("")
+        parts.append("\n".join(summary_lines))
+
+        # 2. Error Signature Section (if present)
+        if result.error_signature is not None:
+            sig = result.error_signature
+            sig_lines = ["--- Runtime Error Signature ---"]
+            sig_lines.append(f"  Exception Type:        {sig.exception_type}")
+            sig_lines.append(f"  Message:               {sig.normalized_message or '(none)'}")
+            if sig.top_target_file:
+                site_str = sig.top_target_file
+                if sig.top_target_line is not None:
+                    site_str += f":{sig.top_target_line}"
+                sig_lines.append(f"  Top Target Site:       {site_str}")
+            sig_lines.append("")
+            parts.append("\n".join(sig_lines))
+
+        # 3. Traceback Frames Section (if frames present)
+        if result.frames:
+            tb_lines = [f"--- Traceback Frames ({len(result.frames)}) ---"]
+            for frame in result.frames:
+                scope = f"in {frame.function_name}" if frame.function_name else ""
+                origin = "[TARGET]  " if frame.is_target else "[EXTERNAL]"
+                tb_lines.append(f"  • {origin} {frame.file_path}:{frame.line_number} {scope}")
+                if frame.code_line:
+                    tb_lines.append(f"      > {frame.code_line}")
+            tb_lines.append("")
+            parts.append("\n".join(tb_lines))
+
+        # 4. Captured Output Section
+        if result.stdout.strip():
+            out_lines = ["--- Standard Output ---"]
+            out_lines.append(result.stdout.rstrip())
+            out_lines.append("")
+            parts.append("\n".join(out_lines))
+
+        if result.stderr.strip() and not result.frames:
+            err_lines = ["--- Standard Error ---"]
+            err_lines.append(result.stderr.rstrip())
+            err_lines.append("")
+            parts.append("\n".join(err_lines))
 
         full_text = "\n".join(parts)
         return sanitize_terminal_text(full_text) if self.enable_sanitization else full_text

@@ -125,6 +125,9 @@ def collect_debug_evidence(
         ExecutionResult containing exit code, outputs, elapsed time,
         parsed TracebackFrames, and normalized ErrorSignature.
     """
+    # Validate that target language is supported by an adapter
+    orchestrator.resolve_adapter(target)
+
     session = orchestrator.session
     if session is not None:
         session.initialize()
