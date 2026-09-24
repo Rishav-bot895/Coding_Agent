@@ -61,6 +61,14 @@ class MalformedSelectorError(CliUsageError):
     """Raised when a target selector contains invalid syntax or identifiers."""
 
 
+class SelectorNotFoundError(CliUsageError):
+    """Raised when a valid selector does not match any function or method in the target file."""
+
+    def __init__(self, message: str, available_selectors: list[str] | None = None) -> None:
+        super().__init__(message)
+        self.available_selectors = available_selectors or []
+
+
 class MultipleTargetsError(CliUsageError):
     """Raised when multiple positional targets are supplied to a single-target command."""
 

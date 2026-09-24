@@ -6,15 +6,12 @@ syntax checks, AST fact extraction, execution preparation (-E -B -P), and valida
 
 from __future__ import annotations
 
-import ast
 import sys
 from pathlib import Path
 
 from localdev.languages.base import LanguageAdapter
 from localdev.schemas import (
-    ASTClassFact,
     ASTFacts,
-    ASTFunctionFact,
     ComplexityAbstentionReason,
     ComplexityClassEnum,
     ComplexityReport,
@@ -24,7 +21,6 @@ from localdev.schemas import (
     ExecutionResult,
     ExecutionSpec,
     LanguageCapabilities,
-    SeverityEnum,
     TargetRecord,
     ValidationLevel,
     ValidationReport,
@@ -82,105 +78,27 @@ class PythonAdapter(LanguageAdapter):
         target: TargetRecord,
         source_text: str | None = None,
     ) -> list[DiagnosticRecord]:
-        source = self._read_source(target, source_text)
-        try:
-            ast.parse(source, filename=target.path, mode="exec")
-            return []
-        except (SyntaxError, IndentationError) as err:
-            line = err.lineno or 1
-            col = err.offset or 1
-            end_line = max(err.end_lineno or line, line)
-            end_col = err.end_offset or col
-            if end_line == line:
-                end_col = max(end_col, col)
+        from localdev.languages.python.syntax import validate_python_syntax
 
-            diag = DiagnosticRecord(
-                source="python_syntax",
-                code=type(err).__name__,
-                message=err.msg or "Syntax error",
-                severity=SeverityEnum.ERROR,
-                start_line=line,
-                start_col=col,
-                end_line=end_line,
-                end_col=end_col,
-                fix_available=False,
-            )
-            return [diag]
+        return validate_python_syntax(target, source_text=source_text)
 
     def extract_ast_facts(
         self,
         target: TargetRecord,
         source_text: str | None = None,
     ) -> ASTFacts:
-        source = self._read_source(target, source_text)
-        total_lines = len(source.splitlines()) if source else 0
-        try:
-            tree = ast.parse(source, filename=target.path, mode="exec")
-        except (SyntaxError, IndentationError) as err:
-            return ASTFacts(
-                functions=[],
-                classes=[],
-                total_lines=total_lines,
-                syntax_error=str(err),
-            )
+        from localdev.languages.python.ast_analyser import extract_ast_facts
 
-        functions: list[ASTFunctionFact] = []
-        classes: list[ASTClassFact] = []
-
-        for node in tree.body:
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                functions.append(
-                    ASTFunctionFact(
-                        name=node.name,
-                        qualified_name=node.name,
-                        start_line=node.lineno,
-                        end_line=getattr(node, "end_lineno", node.lineno),
-                        parameters=[arg.arg for arg in node.args.args],
-                        is_async=isinstance(node, ast.AsyncFunctionDef),
-                        is_method=False,
-                        docstring=ast.get_docstring(node),
-                    )
-                )
-            elif isinstance(node, ast.ClassDef):
-                method_names: list[str] = []
-                for sub in node.body:
-                    if isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                        method_names.append(sub.name)
-                        functions.append(
-                            ASTFunctionFact(
-                                name=sub.name,
-                                qualified_name=f"{node.name}.{sub.name}",
-                                start_line=sub.lineno,
-                                end_line=getattr(sub, "end_lineno", sub.lineno),
-                                parameters=[arg.arg for arg in sub.args.args],
-                                is_async=isinstance(sub, ast.AsyncFunctionDef),
-                                is_method=True,
-                                docstring=ast.get_docstring(sub),
-                            )
-                        )
-                classes.append(
-                    ASTClassFact(
-                        name=node.name,
-                        start_line=node.lineno,
-                        end_line=getattr(node, "end_lineno", node.lineno),
-                        methods=method_names,
-                    )
-                )
-
-        return ASTFacts(
-            functions=functions,
-            classes=classes,
-            total_lines=total_lines,
-            syntax_error=None,
-        )
+        return extract_ast_facts(target, source_text=source_text)
 
     def run_diagnostics(
         self,
         target: TargetRecord,
         source_text: str | None = None,
     ) -> list[DiagnosticRecord]:
-        # Baseline skeleton; integrated with isolated Ruff in P4-T3
-        return []
+        from localdev.languages.python.diagnostics import run_target_diagnostics
+
+        return run_target_diagnostics(target, source_text=source_text)
 
     def prepare_execution(
         self,

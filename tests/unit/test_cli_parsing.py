@@ -348,7 +348,7 @@ def test_successful_main_dispatch() -> None:
     """Valid invocation returns EXIT_SUCCESS and writes initialization line."""
     stdout = io.StringIO()
     with redirect_stdout(stdout):
-        code = main(["analyse", "script.py"])
+        code = main(["debug", "script.py"])
     assert code == EXIT_SUCCESS
-    assert "localdev analyse: initialized for target 'script.py'." in stdout.getvalue()
+    assert "localdev debug: initialized for target 'script.py'." in stdout.getvalue()
 

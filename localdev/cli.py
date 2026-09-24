@@ -22,6 +22,7 @@ from localdev.constants import (
     APP_VERSION,
     EXIT_CLI_USAGE_ERROR,
     EXIT_SUCCESS,
+    EXIT_TARGET_FAILURE,
 )
 from localdev.errors import (
     CliUsageError,
@@ -32,6 +33,7 @@ from localdev.errors import (
 from localdev.reporting.json_reporter import write_json_envelope
 from localdev.reporting.terminal import TerminalReporter
 from localdev.schemas import (
+    AnalysisReport,
     DetectionResult,
     JsonEnvelope,
     TargetInfoRecord,
@@ -436,8 +438,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         parsed = parse_cli_args(argv)
         is_json = parsed.json_output
 
-        # For commands not yet wired in Phase 3, preserve the stub initialization line
-        if parsed.command not in ("info", "detect"):
+        # For commands not yet wired, preserve the stub initialization line
+        if parsed.command not in ("info", "detect", "analyse"):
             sys.stdout.write(
                 f"localdev {parsed.command}: initialized for target '{parsed.target_file}'.\n"
             )
@@ -479,6 +481,22 @@ def main(argv: Sequence[str] | None = None) -> int:
                     reporter = TerminalReporter(sys.stdout)
                     reporter.write(reporter.render_detect(target_record.path, detection))
                 return EXIT_SUCCESS
+
+            if parsed.command == "analyse":
+                analysis_report = orchestrator.analyse(target_record)
+                if parsed.json_output:
+                    analysis_envelope = JsonEnvelope[AnalysisReport](
+                        command="analyse",
+                        success=analysis_report.syntax_valid,
+                        target_path=target_record.path,
+                        data=analysis_report,
+                        errors=[d.message for d in analysis_report.syntax_diagnostics],
+                    )
+                    write_json_envelope(analysis_envelope, sys.stdout)
+                else:
+                    reporter = TerminalReporter(sys.stdout)
+                    reporter.write(reporter.render_analyse(analysis_report))
+                return EXIT_SUCCESS if analysis_report.syntax_valid else EXIT_TARGET_FAILURE
 
         return EXIT_SUCCESS
 

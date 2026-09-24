@@ -325,6 +325,25 @@ class ASTFacts(BaseModel):
     )
 
 
+class AnalysisReport(BaseModel):
+    """Structured data payload for 'localdev analyse' command."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    target: TargetRecord = Field(description="Target file attributes and security metadata.")
+    total_lines: int = Field(ge=0, description="Total line count in target file.")
+    syntax_valid: bool = Field(description="True if target syntax parsed cleanly.")
+    syntax_diagnostics: list[DiagnosticRecord] = Field(
+        default_factory=list, description="Syntax errors detected if any."
+    )
+    ast_facts: ASTFacts | None = Field(
+        default=None, description="Structural AST facts (omitted if syntax is invalid)."
+    )
+    diagnostics: list[DiagnosticRecord] = Field(
+        default_factory=list, description="Normalized static linter diagnostics (omitted on syntax error)."
+    )
+
+
 # =============================================================================
 # Local SLM Production Schemas (Ollama Grammar-Constrained Decoding)
 # =============================================================================

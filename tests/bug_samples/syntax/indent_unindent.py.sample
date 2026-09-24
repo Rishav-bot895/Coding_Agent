@@ -1,0 +1,4 @@
+def foo():
+    if True:
+        x = 1
+   return x

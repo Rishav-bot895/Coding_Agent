@@ -12,12 +12,12 @@ Verifies:
 
 from __future__ import annotations
 
-from contextlib import redirect_stderr, redirect_stdout
 import io
 import json
-from pathlib import Path
 import subprocess
 import sys
+from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
 
 from localdev.cli import main
 from localdev.constants import EXIT_SUCCESS, EXIT_TARGET_IO_ERROR

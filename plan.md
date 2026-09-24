@@ -536,7 +536,7 @@ python -m mypy --strict localdev
 
 ## P4-T1 — Decode and syntax-check Python without source-side effects
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Decode the source file using PEP 263 encoding declarations (defaulting to UTF-8) and validate syntax using `compile(..., mode="exec", flags=ast.PyCF_ONLY_AST)` without importing, executing, or emitting bytecode.
 
@@ -557,7 +557,7 @@ python -m mypy --strict localdev
 
 ## P4-T2 — Extract bounded AST facts and source ranges
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Parse valid Python AST to extract module-level functions, classes, methods, parameters, loops, branches, calls, returns, and precise 1-based line spans for context building, complexity analysis, and selector matching.
 
@@ -580,7 +580,7 @@ python -m mypy --strict localdev
 
 ## P4-T3 — Run Ruff in isolated single-file mode with zero project cache pollution
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Invoke the Ruff linter against the explicit session target copy using isolated configuration, argument lists, `shell=False`, and cache suppression (`--no-cache`), enforcing a defense-in-depth policy to ensure that `localdev` leaves zero unexpected Ruff cache artifacts in the user's target project or its relevant parent directories.
 
@@ -607,7 +607,7 @@ python -m mypy --strict localdev
 
 ## P4-T4 — Deliver the `analyse` workflow
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Integrate syntax validation, AST fact extraction, and isolated Ruff diagnostics into the deterministic `analyse` command, formatting results for terminal and JSON output.
 

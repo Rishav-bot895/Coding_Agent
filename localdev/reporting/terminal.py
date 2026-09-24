@@ -14,6 +14,7 @@ from typing import TextIO
 
 from localdev.reporting.sanitizer import safe_terminal_encode, sanitize_terminal_text
 from localdev.schemas import (
+    AnalysisReport,
     DetectionResult,
     TargetInfoRecord,
     ValidationLevel,
@@ -115,6 +116,84 @@ class TerminalReporter:
             self.render_header("detect", target=target_path, success=True),
             "\n".join(d_lines),
         ]
+        full_text = "\n".join(parts)
+        return sanitize_terminal_text(full_text) if self.enable_sanitization else full_text
+
+    def render_analyse(self, report: AnalysisReport) -> str:
+        """Render deterministic static analysis report."""
+        target = report.target
+        success = report.syntax_valid
+
+        parts: list[str] = [
+            self.render_header("analyse", target=target.path, success=success),
+        ]
+
+        # 1. Syntax Check Section
+        syn_lines = ["--- Syntax Check ---"]
+        if report.syntax_valid:
+            syn_lines.append("  Status:                VALID")
+            syn_lines.append(f"  Total Lines:           {report.total_lines:,}")
+        else:
+            syn_lines.append("  Status:                FAILED")
+            syn_lines.append(f"  Total Lines:           {report.total_lines:,}")
+            syn_lines.append("  Syntax Errors:")
+            for err in report.syntax_diagnostics:
+                syn_lines.append(
+                    f"    • Line {err.start_line}, Col {err.start_col}: [{err.code}] {err.message}"
+                )
+            syn_lines.append("  Note: Syntax failure short-circuited AST and linter diagnostics.")
+        syn_lines.append("")
+        parts.append("\n".join(syn_lines))
+
+        # 2. Structural AST Declarations Section (if syntax valid)
+        if report.syntax_valid and report.ast_facts is not None:
+            ast_facts = report.ast_facts
+            ast_lines = ["--- Structural AST Declarations ---"]
+
+            # Functions / Methods
+            if ast_facts.functions:
+                ast_lines.append(f"  Functions & Methods ({len(ast_facts.functions)}):")
+                for fn in ast_facts.functions:
+                    fn_type = "[async] " if fn.is_async else ""
+                    kind = "method" if fn.is_method else "function"
+                    params_str = ", ".join(fn.parameters)
+                    ast_lines.append(
+                        f"    • {fn_type}{fn.qualified_name}({params_str}) ({kind}, lines {fn.start_line}-{fn.end_line})"
+                    )
+            else:
+                ast_lines.append("  Functions & Methods:   None")
+
+            # Classes
+            if ast_facts.classes:
+                ast_lines.append(f"  Classes ({len(ast_facts.classes)}):")
+                for cls in ast_facts.classes:
+                    methods_str = ", ".join(cls.methods) if cls.methods else "none"
+                    ast_lines.append(
+                        f"    • {cls.name} (lines {cls.start_line}-{cls.end_line}, methods: {methods_str})"
+                    )
+            else:
+                ast_lines.append("  Classes:               None")
+
+            ast_lines.append("")
+            parts.append("\n".join(ast_lines))
+
+        # 3. Static Diagnostics (Ruff) Section (if syntax valid)
+        if report.syntax_valid:
+            diag_lines = ["--- Static Diagnostics (Ruff) ---"]
+            if report.diagnostics:
+                diag_lines.append(f"  Total Findings:        {len(report.diagnostics)}")
+                diag_lines.append("  Findings:")
+                for d in report.diagnostics:
+                    sev = d.severity.value if hasattr(d.severity, "value") else str(d.severity)
+                    fix_marker = " [fix available]" if d.fix_available else ""
+                    diag_lines.append(
+                        f"    • Line {d.start_line}, Col {d.start_col}: [{d.code}] {d.message} ({sev}){fix_marker}"
+                    )
+            else:
+                diag_lines.append("  Status:                CLEAN (zero diagnostic findings)")
+            diag_lines.append("")
+            parts.append("\n".join(diag_lines))
+
         full_text = "\n".join(parts)
         return sanitize_terminal_text(full_text) if self.enable_sanitization else full_text
 
