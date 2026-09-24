@@ -116,7 +116,7 @@ class PythonAdapter(LanguageAdapter):
         return ExecutionSpec(
             command_args=command_args,
             env_overrides={},
-            cwd=str(Path(target.absolute_path).parent),
+            cwd=str(Path.cwd().resolve()),
         )
 
     def analyze_complexity(

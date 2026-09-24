@@ -1,17 +1,28 @@
-"""Evidence collection and deterministic static analysis workflows.
+"""Evidence collection and deterministic static/runtime analysis workflows.
 
-Coordinates deterministic static evidence collection without executing code:
-1. Validates target and checks syntax.
-2. Short-circuits immediately if syntax errors are detected (skips AST and Ruff).
-3. If syntax is valid, extracts bounded AST facts and runs isolated Ruff diagnostics.
+Coordinates deterministic static and runtime evidence collection:
+1. Static analysis: syntax validation, short-circuiting, AST extraction, isolated Ruff.
+2. Runtime debug execution: controlled subprocess execution (-E -B -P), session
+   relocation, asynchronous pipe draining, timeout enforcement, traceback parsing,
+   frame classification (target vs external), and error signature extraction.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from localdev.schemas import AnalysisReport, SeverityEnum
+from localdev.agent.session import Session
+from localdev.execution.limits import ExecutionLimits
+from localdev.execution.runner import build_execution_request, run_execution_request
+from localdev.languages.python.traceback_parser import parse_traceback
+from localdev.schemas import (
+    AnalysisReport,
+    ErrorSignature,
+    ExecutionResult,
+    SeverityEnum,
+)
 
 if TYPE_CHECKING:
     from localdev.agent.orchestrator import Orchestrator
@@ -85,3 +96,109 @@ def collect_analysis_evidence(
         diagnostics=linter_diags,
     )
 
+
+def collect_debug_evidence(
+    orchestrator: Orchestrator,
+    target: TargetRecord,
+    target_args: Sequence[str] | None = None,
+    stdin_file: str | Path | None = None,
+    timeout: float | None = None,
+) -> ExecutionResult:
+    """Execute target under controlled runtime limits and collect traceback evidence.
+
+    In accordance with the Runtime and Isolation Contract:
+    - Runs the relocated temporary session copy under -E -B -P.
+    - Sets cwd to the user invocation directory.
+    - Drains stdout/stderr asynchronously under output byte caps and wall-clock timeout.
+    - Parses execution tracebacks into structured frames, classifying target vs external.
+    - Normalizes session copy paths back to canonical user target paths.
+    - Extracts normalized error signatures.
+
+    Args:
+        orchestrator: Active agent orchestrator.
+        target: Validated target file metadata.
+        target_args: Optional CLI arguments passed after '--' to the target script.
+        stdin_file: Optional file path supplying standard input.
+        timeout: Optional wall-clock timeout override.
+
+    Returns:
+        ExecutionResult containing exit code, outputs, elapsed time,
+        parsed TracebackFrames, and normalized ErrorSignature.
+    """
+    session = orchestrator.session
+    if session is not None:
+        session.initialize()
+        return _execute_and_parse(
+            target=target,
+            session_target=session.session_target_file,
+            target_args=target_args,
+            stdin_file=stdin_file,
+            timeout=timeout,
+        )
+
+    with Session(target_record=target) as temp_session:
+        temp_session.initialize()
+        return _execute_and_parse(
+            target=target,
+            session_target=temp_session.session_target_file,
+            target_args=target_args,
+            stdin_file=stdin_file,
+            timeout=timeout,
+        )
+
+
+def _execute_and_parse(
+    target: TargetRecord,
+    session_target: Path,
+    target_args: Sequence[str] | None = None,
+    stdin_file: str | Path | None = None,
+    timeout: float | None = None,
+) -> ExecutionResult:
+    """Subprocess execution helper for debug evidence collection."""
+    req = build_execution_request(
+        target_path=session_target,
+        args=list(target_args) if target_args else None,
+        stdin_file=stdin_file,
+        cwd=Path.cwd(),
+    )
+
+    limits = (
+        ExecutionLimits(timeout_seconds=timeout)
+        if timeout is not None
+        else ExecutionLimits()
+    )
+    raw_result = run_execution_request(req, limits=limits)
+
+    frames, sig = parse_traceback(
+        raw_result.stderr,
+        target_path=target.path,
+        session_target_path=session_target,
+    )
+
+    if raw_result.timed_out and sig is None:
+        sig = ErrorSignature(
+            exception_type="TimeoutExpired",
+            normalized_message=f"Execution exceeded timeout limit ({limits.timeout_seconds:.1f}s).",
+            top_target_file=target.path,
+            top_target_line=None,
+        )
+    elif raw_result.exit_code != 0 and sig is None:
+        sig = ErrorSignature(
+            exception_type="SystemExit",
+            normalized_message=f"Process exited with non-zero code {raw_result.exit_code}.",
+            top_target_file=target.path,
+            top_target_line=None,
+        )
+
+    return ExecutionResult(
+        exit_code=raw_result.exit_code,
+        stdout=raw_result.stdout,
+        stderr=raw_result.stderr,
+        duration_seconds=raw_result.duration_seconds,
+        timed_out=raw_result.timed_out,
+        output_truncated=raw_result.output_truncated,
+        peak_process_tree_rss_bytes=raw_result.peak_process_tree_rss_bytes,
+        execution_backend=raw_result.execution_backend,
+        error_signature=sig,
+        frames=frames,
+    )

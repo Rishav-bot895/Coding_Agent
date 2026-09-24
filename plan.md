@@ -633,7 +633,7 @@ python -m mypy --strict localdev
 
 ## P5-T1 — Build controlled execution requests and runtime environment
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Implement subprocess request construction for target execution using argument lists, `shell=False`, the selected Python executable, flags `-E`, `-B`, and `-P`, user invocation directory as default working directory (`cwd`), and the environment variable allowlist defined in the Runtime and Isolation Contract.
 
@@ -668,7 +668,7 @@ python -m mypy --strict localdev
 
 ## P5-T2 — Capture output with timeout and byte limits
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Execute the target subprocess while concurrently draining stdout and stderr pipes, enforcing wall-clock timeout and combined output byte limits, and preserving partial output upon breach.
 
@@ -691,7 +691,7 @@ python -m mypy --strict localdev
 
 ## P5-T3 — Terminate the process tree with psutil fallback
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Implement reliable descendant process discovery and termination using `psutil` as a baseline fallback mechanism, ensuring child and grandchild processes are cleaned up upon timeout or termination.
 
@@ -714,7 +714,7 @@ python -m mypy --strict localdev
 
 ## P5-T4 — Parse tracebacks and deliver `debug` execution evidence
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Parse Python execution tracebacks into structured frames, classifying frames as target-local versus external, extracting exception type and message, normalizing session copy `__file__` paths to the canonical target, and delivering deterministic evidence for the `debug` command.
 

@@ -35,6 +35,7 @@ from localdev.reporting.terminal import TerminalReporter
 from localdev.schemas import (
     AnalysisReport,
     DetectionResult,
+    ExecutionResult,
     JsonEnvelope,
     TargetInfoRecord,
 )
