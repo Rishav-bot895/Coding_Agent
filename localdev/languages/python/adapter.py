@@ -9,6 +9,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from localdev.errors import LocaldevError
 from localdev.languages.base import LanguageAdapter
 from localdev.schemas import (
     ASTFacts,
@@ -148,11 +149,103 @@ class PythonAdapter(LanguageAdapter):
         expected_stdout_contains: str | None = None,
         expected_exit: int | None = None,
     ) -> ValidationReport:
+        import ast
+
+        cand_path = Path(candidate_path).resolve()
+        try:
+            cand_text = cand_path.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            return ValidationReport(
+                level_achieved=ValidationLevel.NONE,
+                static_valid=False,
+                failure_reproduction_removed=False,
+                clean_execution=False,
+                behavioral_oracle_passed=None,
+                details={"error": f"Failed to read candidate: {exc}"},
+            )
+
+        # Level A: Static validity (ast.parse)
+        try:
+            ast.parse(cand_text)
+        except SyntaxError as exc:
+            return ValidationReport(
+                level_achieved=ValidationLevel.NONE,
+                static_valid=False,
+                failure_reproduction_removed=False,
+                clean_execution=False,
+                behavioral_oracle_passed=None,
+                details={"syntax_error": str(exc)},
+            )
+
+        static_valid = True
+        level_achieved = ValidationLevel.LEVEL_A
+        failure_removed = False
+        clean_exec = False
+        oracle_passed: bool | None = None
+        details: dict[str, object] = {"static_validity": "clean_parse"}
+
+        # Levels B, C, D: Subprocess execution of candidate
+        if cand_path.is_file():
+            from localdev.agent.evidence import _execute_and_parse
+
+            try:
+                candidate_exec = _execute_and_parse(
+                    target=target,
+                    session_target=cand_path,
+                )
+                details["candidate_exit_code"] = candidate_exec.exit_code
+                details["candidate_stdout"] = candidate_exec.stdout
+                details["candidate_stderr"] = candidate_exec.stderr
+
+                # Level B: Failure reproduction removed
+                if baseline_result is not None:
+                    if baseline_result.error_signature is not None:
+                        orig_sig = baseline_result.error_signature
+                        cand_sig = candidate_exec.error_signature
+                        if cand_sig is None or (
+                            cand_sig.exception_type != orig_sig.exception_type
+                            or cand_sig.normalized_message != orig_sig.normalized_message
+                        ):
+                            failure_removed = True
+                            level_achieved = ValidationLevel.LEVEL_B
+                    elif baseline_result.exit_code != 0:
+                        if candidate_exec.exit_code == 0 or candidate_exec.exit_code != baseline_result.exit_code:
+                            failure_removed = True
+                            level_achieved = ValidationLevel.LEVEL_B
+                else:
+                    failure_removed = True
+
+                # Level C: Clean execution (exit code 0 under controlled limits)
+                if candidate_exec.exit_code == 0 and not candidate_exec.timed_out:
+                    clean_exec = True
+                    level_achieved = ValidationLevel.LEVEL_C
+
+                # Level D: Behavioral oracle
+                has_oracle = (
+                    expected_stdout is not None
+                    or expected_stdout_contains is not None
+                    or expected_exit is not None
+                )
+                if has_oracle:
+                    oracle_ok = True
+                    if expected_exit is not None and candidate_exec.exit_code != expected_exit:
+                        oracle_ok = False
+                    if expected_stdout is not None and candidate_exec.stdout.strip() != expected_stdout.strip():
+                        oracle_ok = False
+                    if expected_stdout_contains is not None and expected_stdout_contains not in candidate_exec.stdout:
+                        oracle_ok = False
+
+                    oracle_passed = oracle_ok
+                    if oracle_ok and clean_exec:
+                        level_achieved = ValidationLevel.LEVEL_D
+            except (LocaldevError, OSError, RuntimeError) as exc:
+                details["execution_error"] = str(exc)
+
         return ValidationReport(
-            level_achieved=ValidationLevel.NONE,
-            static_valid=False,
-            failure_reproduction_removed=False,
-            clean_execution=False,
-            behavioral_oracle_passed=None,
-            details={"status": "validation_skeleton"},
+            level_achieved=level_achieved,
+            static_valid=static_valid,
+            failure_reproduction_removed=failure_removed,
+            clean_execution=clean_exec,
+            behavioral_oracle_passed=oracle_passed,
+            details=details,
         )

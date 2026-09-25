@@ -47,6 +47,7 @@ __all__ = [
     "EditProposalRecord",
     "ErrorSignature",
     "ExecutionResult",
+    "FixReport",
     "InferenceMetadata",
     "JsonEnvelope",
     "ProfileReport",
@@ -533,6 +534,47 @@ class ValidationReport(BaseModel):
 
 
 # =============================================================================
+# Fix Report (Phase 8 Repair Workflow)
+# =============================================================================
+
+
+class FixReport(BaseModel):
+    """Structured data payload for 'localdev fix' command."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    target: TargetRecord = Field(description="Target file attributes and security metadata.")
+    diagnosis: DiagnosisRecord | DiagnosisAbstention | None = Field(
+        default=None, description="Bug diagnosis or abstention report from local SLM."
+    )
+    proposal: EditProposalRecord | None = Field(
+        default=None, description="Proposed structured edit operations."
+    )
+    diff: str = Field(default="", description="Rendered unified diff of proposed patch.")
+    validation: ValidationReport | None = Field(
+        default=None, description="Empirical validation results across Levels A-D."
+    )
+    applied: bool = Field(
+        default=False, description="Whether patch was atomically applied to disk."
+    )
+    declined: bool = Field(
+        default=False, description="Whether patch application was declined by user."
+    )
+    backup_path: str | None = Field(
+        default=None, description="Path to native backup file if created."
+    )
+    message: str = Field(
+        default="", description="Human-readable status summary message."
+    )
+    abstention: DiagnosisAbstention | None = Field(
+        default=None, description="Explicit abstention report if fix workflow abstained."
+    )
+    inference_metadata: InferenceMetadata | None = Field(
+        default=None, description="Inference token budgets and evaluation metadata."
+    )
+
+
+# =============================================================================
 # Complexity Report (CPython Semantics)
 # =============================================================================
 
@@ -688,4 +730,5 @@ class JsonEnvelope(BaseModel, Generic[T]):
 # Rebuild models with forward references to DiagnosisRecord and InferenceMetadata
 ExecutionResult.model_rebuild()
 AnalysisReport.model_rebuild()
+FixReport.model_rebuild()
 

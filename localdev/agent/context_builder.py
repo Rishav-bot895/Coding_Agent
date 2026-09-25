@@ -36,12 +36,14 @@ from localdev.constants import (
 from localdev.errors import PromptBudgetExceededError
 from localdev.inference.prompts import (
     DIAGNOSIS_SYSTEM_PROMPT,
+    EDIT_PROPOSAL_SYSTEM_PROMPT,
     wrap_untrusted_code,
 )
 from localdev.schemas import (
     AnalysisReport,
     ASTFacts,
     ASTFunctionFact,
+    DiagnosisRecord,
     DiagnosticRecord,
     ExecutionResult,
     InferenceMetadata,
@@ -734,6 +736,171 @@ class ContextBuilder:
             was_truncated=was_truncated,
         )
 
+    def build_edit_proposal_context(
+        self,
+        target: TargetRecord,
+        source_text: str,
+        diagnosis: DiagnosisRecord | None = None,
+        analysis_report: AnalysisReport | None = None,
+        execution_result: ExecutionResult | None = None,
+        prompt_budget: int | None = None,
+    ) -> BuiltPromptContext:
+        """Assemble bounded model context for structured edit proposal generation.
+
+        Enforces:
+        - Strict prompt_budget <= 1200 tokens.
+        - Untrusted containment markers around source code.
+        - 1-based line number references for edit indexing.
+        - Inclusion of diagnosis, static findings, and runtime failure evidence.
+        """
+        budget = prompt_budget if prompt_budget is not None else self.config.prompt_budget_tokens
+        if budget > MAX_ALLOWED_PROMPT_BUDGET:
+            raise ValueError(
+                f"prompt_budget ({budget}) cannot exceed hard limit of {MAX_ALLOWED_PROMPT_BUDGET}"
+            )
+
+        safety_margin = self.config.context_window_tokens - budget - self.config.output_budget_tokens
+        if safety_margin < 0:
+            raise ValueError(
+                f"Budget partition invariant violated: {budget} (prompt) + "
+                f"{self.config.output_budget_tokens} (output) > {self.config.context_window_tokens}"
+            )
+
+        system_prompt = EDIT_PROPOSAL_SYSTEM_PROMPT
+        source_lines = source_text.splitlines()
+        total_lines = len(source_lines)
+
+        fault_line, _ = _find_fault_location(analysis_report, execution_result)
+        ast_facts = analysis_report.ast_facts if analysis_report else None
+        enclosing_func = _find_enclosing_function(ast_facts, fault_line)
+        fault_function_name = enclosing_func.qualified_name if enclosing_func else None
+
+        def _calc_tokens(usr_prompt: str) -> int:
+            combined = f"{system_prompt}\n\n{usr_prompt}"
+            return self.token_counter(combined)
+
+        def _render_user_prompt(
+            start_l: int,
+            end_l: int,
+            inc_diag: bool,
+            inc_findings: bool,
+            prefix_note: str = "",
+            suffix_note: str = "",
+        ) -> str:
+            parts: list[str] = [
+                f"Target file: {target.path} ({total_lines} lines)",
+            ]
+            if inc_diag and diagnosis is not None:
+                parts.append(
+                    f"### Diagnosed Bug:\n"
+                    f"Description: {diagnosis.bug_description}\n"
+                    f"Root Cause: {diagnosis.root_cause}\n"
+                    f"Rationale: {diagnosis.rationale}"
+                )
+
+            if inc_findings:
+                findings: list[str] = []
+                if analysis_report is not None and not analysis_report.syntax_valid:
+                    findings.append("Syntax Error detected in source file.")
+                    for syn in analysis_report.syntax_diagnostics:
+                        findings.append(f"  • line {syn.start_line}, col {syn.start_col}: {syn.message}")
+                elif analysis_report is not None and analysis_report.diagnostics:
+                    findings.append("Static Diagnostics:")
+                    for d in analysis_report.diagnostics[:5]:
+                        findings.append(f"  • line {d.start_line}, col {d.start_col}: [{d.code}] {d.message}")
+                if execution_result is not None and execution_result.error_signature is not None:
+                    sig = execution_result.error_signature
+                    findings.append(f"Runtime Failure: {sig.exception_type}: {sig.normalized_message}")
+                    if sig.top_target_line:
+                        findings.append(f"  Top target frame: line {sig.top_target_line}")
+                if findings:
+                    parts.append("### Diagnostic Evidence:\n" + "\n".join(findings))
+
+            parts.append(
+                "### Target Source Code (line numbers before '|' are 1-based indexing references):\n"
+                "Note: In 'expected_text', do NOT include line numbers or '|'; include only the exact original code."
+            )
+            if total_lines > 0 and start_l <= end_l:
+                slice_lines = source_lines[start_l - 1 : end_l]
+                formatted_slice = _format_lines(slice_lines, start_l)
+                body_parts: list[str] = []
+                if prefix_note:
+                    body_parts.append(prefix_note)
+                body_parts.append(formatted_slice)
+                if suffix_note:
+                    body_parts.append(suffix_note)
+                excerpt_code = "\n".join(body_parts)
+                parts.append(wrap_untrusted_code(excerpt_code))
+            else:
+                parts.append(wrap_untrusted_code("# [Empty source file]"))
+
+            parts.append(
+                "### Instructions:\n"
+                "Propose a minimal, guarded structured patch conforming to EditProposalRecord to fix the bug.\n"
+                "Output a single valid JSON object matching the EditProposalRecord schema."
+            )
+            return "\n\n".join(parts)
+
+        cur_start = 1
+        cur_end = total_lines
+        inc_diag = True
+        inc_findings = True
+        prefix_note = ""
+        suffix_note = ""
+        was_truncated = False
+        omitted_categories: list[str] = []
+        included_categories: list[str] = ["system_prompt", "target_source"]
+
+        current_prompt = _render_user_prompt(cur_start, cur_end, inc_diag, inc_findings)
+        current_tokens = _calc_tokens(current_prompt)
+
+        if current_tokens > budget and total_lines > 30:
+            was_truncated = True
+            omitted_categories.append("full_source")
+            target_center = fault_line if fault_line is not None else (total_lines // 2)
+            cur_start = max(1, target_center - 15)
+            cur_end = min(total_lines, target_center + 15)
+            prefix_note = f"# ... [Lines 1 to {cur_start - 1} omitted] ..." if cur_start > 1 else ""
+            suffix_note = f"# ... [Lines {cur_end + 1} to {total_lines} omitted] ..." if cur_end < total_lines else ""
+            current_prompt = _render_user_prompt(cur_start, cur_end, inc_diag, inc_findings, prefix_note, suffix_note)
+            current_tokens = _calc_tokens(current_prompt)
+
+        if current_tokens > budget and inc_findings:
+            inc_findings = False
+            was_truncated = True
+            omitted_categories.append("diagnostic_evidence")
+            current_prompt = _render_user_prompt(cur_start, cur_end, inc_diag, inc_findings, prefix_note, suffix_note)
+            current_tokens = _calc_tokens(current_prompt)
+
+        if current_tokens > budget:
+            raise PromptBudgetExceededError(
+                f"Minimal viable edit proposal prompt ({current_tokens} tokens) exceeds prompt budget ({budget} tokens).",
+                estimated_tokens=current_tokens,
+                prompt_budget=budget,
+            )
+
+        metadata = InferenceMetadata(
+            context_window_tokens=self.config.context_window_tokens,
+            prompt_budget_tokens=budget,
+            output_budget_tokens=self.config.output_budget_tokens,
+            application_safety_margin_tokens=safety_margin,
+            estimated_prompt_tokens=current_tokens,
+            was_truncated=was_truncated,
+            omitted_evidence_categories=omitted_categories,
+        )
+
+        return BuiltPromptContext(
+            system_prompt=system_prompt,
+            user_prompt=current_prompt,
+            metadata=metadata,
+            evidence_manifest=[],
+            fault_line=fault_line,
+            fault_function=fault_function_name,
+            included_categories=included_categories,
+            omitted_categories=omitted_categories,
+            was_truncated=was_truncated,
+        )
+
 
 def build_diagnosis_context(
     target: TargetRecord,
@@ -750,6 +917,29 @@ def build_diagnosis_context(
     return builder.build_diagnosis_context(
         target=target,
         source_text=source_text,
+        analysis_report=analysis_report,
+        execution_result=execution_result,
+        prompt_budget=prompt_budget,
+    )
+
+
+def build_edit_proposal_context(
+    target: TargetRecord,
+    source_text: str,
+    diagnosis: DiagnosisRecord | None = None,
+    analysis_report: AnalysisReport | None = None,
+    execution_result: ExecutionResult | None = None,
+    *,
+    config: LocaldevConfig | None = None,
+    token_counter: Callable[[str], int] | None = None,
+    prompt_budget: int | None = None,
+) -> BuiltPromptContext:
+    """Convenience functional interface for ContextBuilder.build_edit_proposal_context."""
+    builder = ContextBuilder(config=config, token_counter=token_counter)
+    return builder.build_edit_proposal_context(
+        target=target,
+        source_text=source_text,
+        diagnosis=diagnosis,
         analysis_report=analysis_report,
         execution_result=execution_result,
         prompt_budget=prompt_budget,

@@ -1035,7 +1035,7 @@ python -m mypy --strict localdev
 
 ## P8-T4 — Deliver `fix` and `--propose-fix` workflows
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Connect diagnosis, edit proposal generation, candidate application, diff rendering, candidate validation (Phase 9), user confirmation, and atomic replacement into the `fix` command workflow.
 

@@ -19,6 +19,7 @@ from localdev.schemas import (
     DiagnosisAbstention,
     DiagnosisRecord,
     ExecutionResult,
+    FixReport,
     InferenceMetadata,
     TargetInfoRecord,
     ValidationLevel,
@@ -274,6 +275,55 @@ class TerminalReporter:
         # 5. Optional Model Diagnosis Section (if --diagnose was requested)
         if result.diagnosis is not None:
             parts.append(self.render_diagnosis(result.diagnosis, result.inference_metadata))
+
+        full_text = "\n".join(parts)
+        return sanitize_terminal_text(full_text) if self.enable_sanitization else full_text
+
+    def render_fix(self, target_path: str, report: FixReport) -> str:
+        """Render complete terminal report for 'fix' command."""
+        success = report.applied or (report.proposal is not None and report.abstention is None)
+        parts: list[str] = [
+            self.render_header("fix", target=target_path, success=success)
+        ]
+
+        # 1. Model Diagnosis
+        if report.diagnosis is not None:
+            parts.append(self.render_diagnosis(report.diagnosis, report.inference_metadata))
+
+        # 2. Proposed Unified Diff
+        if report.diff.strip():
+            parts.append(self.render_diff(report.diff))
+
+        # 3. Validation Assessment
+        if report.validation is not None:
+            val = report.validation
+            checks = {
+                "static_valid": val.static_valid,
+                "failure_reproduction_removed": val.failure_reproduction_removed,
+                "clean_execution": val.clean_execution,
+                "behavioral_oracle_passed": val.behavioral_oracle_passed,
+            }
+            parts.append(self.render_validation_levels(val.level_achieved, checks))
+
+        # 4. Patch Application / Review Status
+        status_lines: list[str] = ["--- Patch Application Status ---"]
+        if report.applied:
+            status_lines.append(f"  [APPLIED] Patch successfully applied to '{target_path}'.")
+            if report.backup_path:
+                status_lines.append(f"  Backup preserved at: {report.backup_path}")
+        elif report.declined:
+            status_lines.append("  [DECLINED] Patch application was declined by user. Target file remains unchanged.")
+        elif report.abstention is not None:
+            status_lines.append(f"  [ABSTAINED] Fix workflow abstained: {report.abstention.details}")
+            if report.abstention.validation_errors:
+                for err in report.abstention.validation_errors:
+                    status_lines.append(f"    • {err}")
+        elif report.proposal is not None:
+            status_lines.append(f"  [PROPOSED] {report.message or 'Fix proposed. Pass --apply to write to disk.'}")
+        else:
+            status_lines.append(f"  [STATUS] {report.message or 'No patch proposed.'}")
+        status_lines.append("")
+        parts.append("\n".join(status_lines))
 
         full_text = "\n".join(parts)
         return sanitize_terminal_text(full_text) if self.enable_sanitization else full_text

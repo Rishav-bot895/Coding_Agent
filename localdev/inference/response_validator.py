@@ -26,20 +26,28 @@ from localdev.errors import (
     InferenceError,
     OllamaConnectionError,
     OllamaTimeoutError,
+    PatchApplicationError,
     PromptBudgetExceededError,
     SchemaValidationError,
 )
 from localdev.inference.base import BaseInferenceClient
 from localdev.inference.prompts import (
+    build_edit_proposal_correction_prompt,
     build_grounding_correction_prompt,
     build_schema_correction_prompt,
 )
-from localdev.patching import EditProposalRecord, EditValidator
+from localdev.patching import (
+    EditProposalRecord,
+    EditValidator,
+    PatchApplier,
+    PatchCandidate,
+)
 from localdev.schemas import (
     DiagnosisAbstention,
     DiagnosisAbstentionReason,
     DiagnosisRecord,
     InferenceMetadata,
+    TargetRecord,
 )
 
 # Regex to detect explicit line number references in text (e.g., 'line 42', 'lines 10-20')
@@ -401,4 +409,242 @@ class EditProposalValidator:
         """Validate parsed EditProposalRecord against target source text."""
         result = self.edit_validator.validate_proposal(record)
         return result.is_valid, result.errors
+
+
+def execute_edit_proposal_with_retry(
+    client: BaseInferenceClient,
+    messages: list[dict[str, str]],
+    target: TargetRecord,
+    source_text: str,
+    *,
+    model: str | None = None,
+    keep_alive: int | None = 0,
+) -> tuple[
+    EditProposalRecord | None,
+    PatchCandidate | None,
+    DiagnosisAbstention | None,
+    InferenceMetadata | None,
+]:
+    """Execute edit proposal inference with strict Pydantic validation, source verification, Level A check, and single retry.
+
+    Workflow:
+    1. First attempt: call client.chat_structured with messages.
+    2. If successful, validate edit operations against source lines (expected_text match, bounds).
+       If valid: apply patch with PatchApplier and verify Level A (ast.parse).
+       If all pass: return (proposal, candidate, None, metadata).
+       If invalid: construct correction prompt and proceed to retry.
+    3. If first attempt fails schema validation:
+       Catch SchemaValidationError and construct schema correction prompt.
+    4. If connection error or timeout:
+       Safely return DiagnosisAbstention without useless retries.
+    5. Second attempt (retry): send conversation history with correction prompt.
+    6. Validate retry output:
+       If valid and passes Level A: return (proposal, candidate, None, retry_metadata).
+       If invalid: return DiagnosisAbstention detailing failure reasons with retry_attempted=True.
+    """
+    validator = EditProposalValidator(target=target, source_text=source_text)
+    applier = PatchApplier()
+
+    first_attempt_raw: str | None = None
+    first_attempt_errors: list[str] = []
+    first_attempt_reason: DiagnosisAbstentionReason | None = None
+    correction_prompt: str = ""
+
+    # -------------------------------------------------------------------------
+    # Attempt 1
+    # -------------------------------------------------------------------------
+    try:
+        candidate_proposal, metadata = client.chat_structured(
+            messages,
+            EditProposalRecord,
+            model=model,
+            keep_alive=keep_alive,
+        )
+        is_valid, errors = validator.validate_record(candidate_proposal)
+        if is_valid:
+            try:
+                candidate = applier.apply(candidate_proposal, target, source_text)
+                import ast
+
+                ast.parse(candidate.patched_text)
+                return candidate_proposal, candidate, None, metadata
+            except SyntaxError as syn_err:
+                errors = [f"Patched candidate has invalid Python syntax: {syn_err}"]
+                first_attempt_errors = errors
+                first_attempt_reason = DiagnosisAbstentionReason.SCHEMA_VALIDATION_FAILED
+                first_attempt_raw = candidate_proposal.model_dump_json()
+                correction_prompt = build_edit_proposal_correction_prompt(errors, first_attempt_raw)
+            except (PatchApplicationError, ValueError, KeyError, IndexError, OSError) as app_err:
+                errors = [f"Failed to apply patch: {app_err}"]
+                first_attempt_errors = errors
+                first_attempt_reason = DiagnosisAbstentionReason.SCHEMA_VALIDATION_FAILED
+                first_attempt_raw = candidate_proposal.model_dump_json()
+                correction_prompt = build_edit_proposal_correction_prompt(errors, first_attempt_raw)
+        else:
+            first_attempt_errors = errors
+            first_attempt_reason = DiagnosisAbstentionReason.OUT_OF_BOUNDS_LINES
+            first_attempt_raw = candidate_proposal.model_dump_json()
+            correction_prompt = build_edit_proposal_correction_prompt(errors, first_attempt_raw)
+
+    except SchemaValidationError as exc:
+        first_attempt_raw = exc.raw_payload
+        first_attempt_errors = [str(exc)]
+        first_attempt_reason = DiagnosisAbstentionReason.SCHEMA_VALIDATION_FAILED
+        correction_prompt = build_schema_correction_prompt(
+            error_message=str(exc),
+            raw_payload=first_attempt_raw or "",
+            schema_cls=EditProposalRecord,
+        )
+
+    except OllamaConnectionError as exc:
+        return (
+            None,
+            None,
+            DiagnosisAbstention(
+                target=target.path,
+                reason=DiagnosisAbstentionReason.MODEL_UNAVAILABLE,
+                details=f"Ollama inference service unavailable: {exc}",
+                validation_errors=[str(exc)],
+                retry_attempted=False,
+            ),
+            None,
+        )
+
+    except OllamaTimeoutError as exc:
+        return (
+            None,
+            None,
+            DiagnosisAbstention(
+                target=target.path,
+                reason=DiagnosisAbstentionReason.INFERENCE_TIMEOUT,
+                details=f"Ollama inference timed out: {exc}",
+                validation_errors=[str(exc)],
+                retry_attempted=False,
+            ),
+            None,
+        )
+
+    except PromptBudgetExceededError as exc:
+        return (
+            None,
+            None,
+            DiagnosisAbstention(
+                target=target.path,
+                reason=DiagnosisAbstentionReason.PROMPT_BUDGET_EXCEEDED,
+                details=f"Prompt budget exceeded: {exc}",
+                validation_errors=[str(exc)],
+                retry_attempted=False,
+            ),
+            None,
+        )
+
+    except InferenceError as exc:
+        return (
+            None,
+            None,
+            DiagnosisAbstention(
+                target=target.path,
+                reason=DiagnosisAbstentionReason.MODEL_UNAVAILABLE,
+                details=f"Inference error: {exc}",
+                validation_errors=[str(exc)],
+                retry_attempted=False,
+            ),
+            None,
+        )
+
+    # -------------------------------------------------------------------------
+    # Attempt 2 (Single Automated Retry)
+    # -------------------------------------------------------------------------
+    retry_messages = list(messages)
+    if first_attempt_raw:
+        retry_messages.append({"role": "assistant", "content": first_attempt_raw})
+    retry_messages.append({"role": "user", "content": correction_prompt})
+
+    try:
+        retry_proposal, retry_metadata = client.chat_structured(
+            retry_messages,
+            EditProposalRecord,
+            model=model,
+            keep_alive=keep_alive,
+        )
+        is_valid, errors = validator.validate_record(retry_proposal)
+        if not is_valid:
+            return (
+                None,
+                None,
+                DiagnosisAbstention(
+                    target=target.path,
+                    reason=first_attempt_reason or DiagnosisAbstentionReason.OUT_OF_BOUNDS_LINES,
+                    details=f"Retry proposal failed verification: {'; '.join(errors)}",
+                    raw_payload=retry_proposal.model_dump_json(),
+                    validation_errors=errors,
+                    retry_attempted=True,
+                ),
+                retry_metadata,
+            )
+
+        try:
+            candidate = applier.apply(retry_proposal, target, source_text)
+            import ast
+
+            ast.parse(candidate.patched_text)
+            return retry_proposal, candidate, None, retry_metadata
+        except SyntaxError as syn_err:
+            return (
+                None,
+                None,
+                DiagnosisAbstention(
+                    target=target.path,
+                    reason=DiagnosisAbstentionReason.SCHEMA_VALIDATION_FAILED,
+                    details=f"Retry proposal produced invalid Python syntax: {syn_err}",
+                    raw_payload=retry_proposal.model_dump_json(),
+                    validation_errors=[str(syn_err)],
+                    retry_attempted=True,
+                ),
+                retry_metadata,
+            )
+        except (PatchApplicationError, ValueError, KeyError, IndexError, OSError) as app_err:
+            return (
+                None,
+                None,
+                DiagnosisAbstention(
+                    target=target.path,
+                    reason=DiagnosisAbstentionReason.SCHEMA_VALIDATION_FAILED,
+                    details=f"Failed to apply retry proposal: {app_err}",
+                    raw_payload=retry_proposal.model_dump_json(),
+                    validation_errors=[str(app_err)],
+                    retry_attempted=True,
+                ),
+                retry_metadata,
+            )
+
+    except SchemaValidationError as exc:
+        return (
+            None,
+            None,
+            DiagnosisAbstention(
+                target=target.path,
+                reason=DiagnosisAbstentionReason.SCHEMA_VALIDATION_FAILED,
+                details=f"Retry proposal failed schema validation: {exc}",
+                raw_payload=exc.raw_payload,
+                validation_errors=[str(exc)],
+                retry_attempted=True,
+            ),
+            None,
+        )
+
+    except InferenceError as exc:
+        return (
+            None,
+            None,
+            DiagnosisAbstention(
+                target=target.path,
+                reason=first_attempt_reason or DiagnosisAbstentionReason.MODEL_UNAVAILABLE,
+                details=f"Inference error during retry: {exc}",
+                raw_payload=first_attempt_raw,
+                validation_errors=first_attempt_errors + [str(exc)],
+                retry_attempted=True,
+            ),
+            None,
+        )
 

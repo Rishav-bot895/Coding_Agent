@@ -20,6 +20,7 @@ from localdev.agent.session import Session
 from localdev.constants import (
     APP_NAME,
     APP_VERSION,
+    EXIT_ABSTENTION,
     EXIT_CLI_USAGE_ERROR,
     EXIT_SUCCESS,
     EXIT_TARGET_FAILURE,
@@ -37,6 +38,7 @@ from localdev.schemas import (
     DetectionResult,
     DiagnosisAbstention,
     ExecutionResult,
+    FixReport,
     JsonEnvelope,
     TargetInfoRecord,
 )
@@ -72,6 +74,7 @@ class ParsedCliCommand:
     timeout: float | None = None
     fail_on_job_failure: bool = False
     diagnose: bool = False
+    propose_only: bool = False
 
 
 
@@ -329,6 +332,13 @@ def create_parser() -> LocaldevArgumentParser:
         type=int,
         help="Expected exit code for Level D behavioral validation.",
     )
+    p_fix.add_argument(
+        "--propose-only",
+        "--propose-fix",
+        dest="propose_only",
+        action="store_true",
+        help="Display proposed patch and validation results without prompting to apply.",
+    )
 
     # complexity
     p_complexity = subparsers.add_parser(
@@ -446,6 +456,7 @@ def parse_cli_args(argv: Sequence[str]) -> ParsedCliCommand:
         timeout=getattr(args, "timeout", None),
         fail_on_job_failure=bool(getattr(args, "fail_on_job_failure", False)),
         diagnose=bool(getattr(args, "diagnose", False)),
+        propose_only=bool(getattr(args, "propose_only", False)),
     )
 
 
@@ -468,7 +479,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         is_json = parsed.json_output
 
         # For commands not yet wired, preserve the stub initialization line
-        if parsed.command not in ("info", "detect", "analyse", "debug"):
+        if parsed.command not in ("info", "detect", "analyse", "debug", "fix"):
             sys.stdout.write(
                 f"localdev {parsed.command}: initialized for target '{parsed.target_file}'.\n"
             )
@@ -582,6 +593,52 @@ def main(argv: Sequence[str] | None = None) -> int:
                     reporter = TerminalReporter(sys.stdout)
                     reporter.write(reporter.render_debug(target_record.path, exec_result))
                 return EXIT_SUCCESS if is_success else EXIT_TARGET_FAILURE
+
+            if parsed.command == "fix":
+                fix_report = orchestrator.fix(
+                    target=target_record,
+                    apply=parsed.apply,
+                    propose_only=parsed.propose_only,
+                    expected_stdout=parsed.expected_stdout,
+                    expected_exit=parsed.expected_exit,
+                    target_args=parsed.target_args,
+                    stdin_file=parsed.stdin_file,
+                    timeout=parsed.timeout,
+                    fail_on_job_failure=parsed.fail_on_job_failure,
+                )
+                if parsed.json_output:
+                    fix_limitations: list[str] = []
+                    if fix_report.abstention is not None:
+                        fix_limitations.append(
+                            f"Fix workflow abstained: {fix_report.abstention.details}"
+                        )
+                    fix_envelope = JsonEnvelope[FixReport](
+                        command="fix",
+                        success=fix_report.applied
+                        or (fix_report.proposal is not None and fix_report.abstention is None)
+                        or ("No defect" in fix_report.message),
+                        target_path=target_record.path,
+                        data=fix_report,
+                        errors=fix_report.abstention.validation_errors
+                        if fix_report.abstention
+                        else [],
+                        limitations=fix_limitations,
+                    )
+                    write_json_envelope(fix_envelope, sys.stdout)
+                else:
+                    reporter = TerminalReporter(sys.stdout)
+                    reporter.write(reporter.render_fix(target_record.path, fix_report))
+
+                if fix_report.abstention is not None:
+                    return EXIT_ABSTENTION
+                if (
+                    fix_report.applied
+                    or fix_report.declined
+                    or fix_report.proposal is not None
+                    or ("No defect" in fix_report.message)
+                ):
+                    return EXIT_SUCCESS
+                return EXIT_TARGET_FAILURE
 
         return EXIT_SUCCESS
 
