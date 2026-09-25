@@ -99,3 +99,25 @@ def build_grounding_correction_prompt(
         "Please provide the corrected JSON object citing ONLY verified evidence IDs from the manifest and valid line numbers within the target file."
     )
 
+
+def build_edit_proposal_correction_prompt(
+    validation_errors: list[str],
+    raw_payload: str,
+) -> str:
+    """Build a retry prompt for correcting edit proposals that fail line or text verification."""
+    errs_text = "\n".join(f"- {err}" for err in validation_errors)
+    return (
+        "Your previous edit proposal failed target source verification.\n"
+        f"Validation errors:\n{errs_text}\n\n"
+        f"Previous invalid payload:\n{raw_payload}\n\n"
+        "Please provide the corrected JSON object strictly conforming to EditProposalRecord.\n"
+        "Remember:\n"
+        "- Line numbers are 1-based and inclusive (start_line, end_line).\n"
+        "- Replacement: start_line <= end_line; expected_text must match target lines exactly.\n"
+        "- Insertion before line K: start_line = K, end_line = K - 1; expected_text = \"\".\n"
+        "- EOF append on N-line file: start_line = N + 1, end_line = N; expected_text = \"\".\n"
+        "- Deletion: start_line <= end_line; expected_text matches lines to delete; replacement_text = \"\".\n"
+        "- Edits must be strictly ordered by increasing line numbers without overlap (start_line_i > end_line_{i-1}).\n"
+        "- Maximum 8 edits and 80 total changed lines."
+    )
+

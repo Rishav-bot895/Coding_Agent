@@ -937,7 +937,7 @@ python -m mypy --strict localdev
 
 ## P8-T1 — Define and validate bounded edit proposals
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Define and enforce a strict, unambiguous patch schema with frozen indexing rules, validating that proposals target only the single canonical file, do not overlap, and respect tight complexity bounds.
 
@@ -967,7 +967,7 @@ python -m mypy --strict localdev
 
 ## P8-T2 — Apply edits to a temporary copy and render a diff
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Apply validated edits to an in-memory/session candidate copy of the target file, preserving original encoding, BOM, newline style, and trailing newline state, and render a standard contextual unified diff.
 
@@ -992,7 +992,7 @@ python -m mypy --strict localdev
 
 ## P8-T3 — Implement confirmed atomic replacement with native ReplaceFileW backup
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Implement the final write stage: after validation and explicit confirmation, re-resolve the target path, reject reparse points, perform compare-before-replace SHA-256 stale-edit detection, stage the replacement candidate on the target's volume, and atomically replace the target file using Windows `ReplaceFileW` with flags set to 0, leveraging its native `lpBackupFileName` parameter for atomic backup creation.
 

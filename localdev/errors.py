@@ -167,6 +167,19 @@ class PatchApplicationError(LocaldevError):
         self.edit_index = edit_index
 
 
+class EditValidationError(PatchApplicationError):
+    """Raised when an edit proposal fails validation against the target file."""
+
+    def __init__(
+        self,
+        message: str,
+        edit_index: int | None = None,
+        validation_errors: list[str] | None = None,
+    ) -> None:
+        super().__init__(message, edit_index=edit_index)
+        self.validation_errors = validation_errors or []
+
+
 class UnsupportedLanguageError(AbstentionError):
     """Raised when target file language is unsupported or ambiguous."""
 

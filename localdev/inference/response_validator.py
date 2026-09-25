@@ -34,6 +34,7 @@ from localdev.inference.prompts import (
     build_grounding_correction_prompt,
     build_schema_correction_prompt,
 )
+from localdev.patching import EditProposalRecord, EditValidator
 from localdev.schemas import (
     DiagnosisAbstention,
     DiagnosisAbstentionReason,
@@ -348,3 +349,56 @@ def execute_diagnosis_with_retry(
             ),
             None,
         )
+
+
+class EditProposalValidator:
+    """Validates raw model output or parsed EditProposalRecord against schema, line bounds, and target source."""
+
+    def __init__(
+        self,
+        target: Any,
+        source_text: str,
+    ) -> None:
+        self.target = target
+        self.source_text = source_text
+        self.edit_validator = EditValidator(target=target, source_text=source_text)
+
+    def validate_payload(
+        self,
+        raw_payload: str,
+    ) -> tuple[EditProposalRecord | None, list[str]]:
+        """Validate raw JSON payload string into EditProposalRecord and verify against target source."""
+        if not raw_payload or not raw_payload.strip():
+            return None, ["Model output is empty or whitespace."]
+
+        try:
+            parsed_json = json.loads(raw_payload)
+        except (ValueError, json.JSONDecodeError) as exc:
+            return None, [f"Malformed JSON syntax: {exc}"]
+
+        if not isinstance(parsed_json, dict):
+            return None, [f"Expected JSON object (dict), got {type(parsed_json).__name__}."]
+
+        try:
+            record = EditProposalRecord.model_validate(parsed_json)
+        except ValidationError as exc:
+            error_msgs = [
+                f"{'.'.join(str(loc) for loc in err['loc'])}: {err['msg']} (got {err.get('input', 'missing')!r})"
+                for err in exc.errors()
+            ]
+            return None, error_msgs
+
+        result = self.edit_validator.validate_proposal(record)
+        if not result.is_valid:
+            return None, result.errors
+
+        return record, []
+
+    def validate_record(
+        self,
+        record: EditProposalRecord,
+    ) -> tuple[bool, list[str]]:
+        """Validate parsed EditProposalRecord against target source text."""
+        result = self.edit_validator.validate_proposal(record)
+        return result.is_valid, result.errors
+

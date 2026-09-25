@@ -318,3 +318,76 @@ def verify_target_hash(target_path: str | Path, expected_sha256: str) -> None:
             expected_hash=expected_sha256,
             actual_hash=current_hash,
         )
+
+
+def re_resolve_and_verify_target(
+    target_path: str | Path,
+    expected_sha256: str,
+) -> Path:
+    """Re-resolve target path immediately before write and verify all write safety invariants.
+
+    Enforces:
+    - Path existence and regular file check.
+    - Reparse point (symlink/junction) rejection.
+    - Windows read-only attribute rejection.
+    - Compare-before-replace SHA-256 stale-edit detection.
+
+    Note on Concurrency Limitation:
+        The compare-before-replace SHA-256 check provides stale-edit detection
+        against external file modifications occurring between analysis and
+        replacement. It is not an OS-level atomic compare-and-swap (CAS) and
+        does not eliminate the tiny microsecond race window between hash
+        calculation and ReplaceFileW execution.
+
+    Args:
+        target_path: Target path to verify.
+        expected_sha256: Baseline pre-edit SHA-256 hash.
+
+    Returns:
+        Resolved canonical absolute Path on Windows.
+
+    Raises:
+        TargetValidationError: If target is missing, a directory, a reparse point, or read-only.
+        StaleEditError: If file hash has changed since analysis baseline.
+    """
+    raw_path_str = str(target_path).strip()
+    if not raw_path_str:
+        raise TargetValidationError("Target file path cannot be empty.")
+
+    p = Path(raw_path_str)
+
+    if not os.path.lexists(p):
+        raise TargetValidationError(
+            f"Target file does not exist: '{raw_path_str}'",
+            details={"path": raw_path_str},
+        )
+
+    if p.is_dir():
+        raise TargetValidationError(
+            f"Target path is a directory, not a regular file: '{raw_path_str}'",
+            details={"path": raw_path_str},
+        )
+
+    # Detect reparse points and read-only status before verifying hash
+    is_reparse_point, is_read_only = get_target_file_attributes(p)
+    if is_reparse_point:
+        raise TargetValidationError(
+            f"Target file '{raw_path_str}' is a symlink or reparse point, "
+            "which is prohibited as a write target.",
+            details={"path": raw_path_str},
+        )
+    if is_read_only:
+        raise TargetValidationError(
+            f"Target file '{raw_path_str}' has the Windows read-only attribute set "
+            "and cannot be modified.",
+            details={"path": raw_path_str},
+        )
+
+    # Verify baseline SHA-256 hash
+    verify_target_hash(p, expected_sha256)
+
+    try:
+        return p.resolve()
+    except OSError:
+        return p.absolute()
+

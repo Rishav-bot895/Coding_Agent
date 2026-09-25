@@ -14,18 +14,48 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    field_validator,
     model_validator,
 )
 
 from localdev.constants import (
     APPLICATION_SAFETY_MARGIN_TOKENS,
     CONTEXT_WINDOW_TOKENS,
-    MAX_PATCH_CHANGED_LINES,
-    MAX_PATCH_EDITS,
     OUTPUT_BUDGET_TOKENS,
     PROMPT_BUDGET_TOKENS,
 )
+from localdev.patching.edit_schema import (
+    EditOperation,
+    EditOperationType,
+    EditProposalRecord,
+)
+
+__all__ = [
+    "ASTClassFact",
+    "ASTFacts",
+    "ASTFunctionFact",
+    "AnalysisReport",
+    "ComplexityAbstentionReason",
+    "ComplexityClassEnum",
+    "ComplexityReport",
+    "ConfidenceEnum",
+    "DiagnosisAbstention",
+    "DiagnosisAbstentionReason",
+    "DiagnosisRecord",
+    "DiagnosticRecord",
+    "EditOperation",
+    "EditOperationType",
+    "EditProposalRecord",
+    "ErrorSignature",
+    "ExecutionResult",
+    "InferenceMetadata",
+    "JsonEnvelope",
+    "ProfileReport",
+    "SeverityEnum",
+    "TargetRecord",
+    "TracebackFrame",
+    "ValidationLevel",
+    "ValidationReport",
+]
 
 T = TypeVar("T")
 
@@ -66,13 +96,6 @@ class ComplexityAbstentionReason(str, Enum):
     EXTERNAL_DEPENDENCY = "EXTERNAL_DEPENDENCY"
     UNSUPPORTED_SYNTAX = "UNSUPPORTED_SYNTAX"
 
-
-class EditOperationType(str, Enum):
-    """Supported single-file edit operation types."""
-
-    REPLACE = "replace"
-    INSERT = "insert"
-    DELETE = "delete"
 
 
 class SeverityEnum(str, Enum):
@@ -476,83 +499,6 @@ class DiagnosisAbstention(BaseModel):
         default=False, description="Whether an automated schema-correction retry was attempted."
     )
 
-
-class EditOperation(BaseModel):
-    """Single line-oriented edit operation within a single source file."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    operation: EditOperationType = Field(
-        description="Operation type: replace, insert, or delete."
-    )
-    start_line: int = Field(ge=1, description="1-based inclusive starting line.")
-    end_line: int = Field(ge=1, description="1-based inclusive ending line.")
-    expected_text: str = Field(
-        description="Normalized text expected in target file at specified line range."
-    )
-    replacement_text: str = Field(
-        default="",
-        description="New replacement text to insert. Empty for delete operation.",
-    )
-
-    @model_validator(mode="after")
-    def validate_operation_lines(self) -> EditOperation:
-        if (
-            self.operation in (EditOperationType.REPLACE, EditOperationType.DELETE)
-            and self.start_line > self.end_line
-        ):
-            raise ValueError(
-                f"{self.operation.value} operation requires start_line ({self.start_line}) <= end_line ({self.end_line})"
-            )
-        if self.operation == EditOperationType.INSERT and self.start_line != self.end_line:
-            raise ValueError(
-                f"insert operation requires start_line == end_line, got {self.start_line} and {self.end_line}"
-            )
-        return self
-
-
-class EditProposalRecord(BaseModel):
-    """Structured patch proposal containing validated line edits for one target file.
-
-    Enforces 1-based inclusive line indexing, bounded edit counts, and path safety.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    target_file: str = Field(
-        description="Relative or canonical name of the single target file."
-    )
-    edits: list[EditOperation] = Field(
-        min_length=1,
-        max_length=MAX_PATCH_EDITS,
-        description=f"List of structured edits (maximum {MAX_PATCH_EDITS}).",
-    )
-    explanation: str = Field(description="Summary of the rationale for this patch.")
-
-    @field_validator("target_file")
-    @classmethod
-    def validate_target_path_safety(cls, v: str) -> str:
-        # Prevent path traversal and shell injection
-        if ".." in v or ("/" in v and "\\" in v):
-            raise ValueError(f"Path traversal or mixed separators forbidden in target_file: {v}")
-        for char in ("&", "|", ";", ">", "<", "`", "$"):
-            if char in v:
-                raise ValueError(f"Shell metacharacters forbidden in target_file: {v}")
-        return v
-
-    @model_validator(mode="after")
-    def validate_patch_limits(self) -> EditProposalRecord:
-        total_changed_lines = 0
-        for edit in self.edits:
-            exp_lines = len(edit.expected_text.splitlines()) if edit.expected_text else 0
-            rep_lines = len(edit.replacement_text.splitlines()) if edit.replacement_text else 0
-            total_changed_lines += max(exp_lines, rep_lines)
-
-        if total_changed_lines > MAX_PATCH_CHANGED_LINES:
-            raise ValueError(
-                f"Total changed lines ({total_changed_lines}) exceeds hard limit of {MAX_PATCH_CHANGED_LINES}"
-            )
-        return self
 
 
 # =============================================================================
