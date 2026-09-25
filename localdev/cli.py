@@ -35,6 +35,7 @@ from localdev.reporting.terminal import TerminalReporter
 from localdev.schemas import (
     AnalysisReport,
     DetectionResult,
+    DiagnosisAbstention,
     ExecutionResult,
     JsonEnvelope,
     TargetInfoRecord,
@@ -70,6 +71,7 @@ class ParsedCliCommand:
     keep_session: bool = False
     timeout: float | None = None
     fail_on_job_failure: bool = False
+    diagnose: bool = False
 
 
 
@@ -268,6 +270,11 @@ def create_parser() -> LocaldevArgumentParser:
         parents=[shared_options],
     )
     p_analyse.add_argument("target", help="Explicit target Python source file.")
+    p_analyse.add_argument(
+        "--diagnose",
+        action="store_true",
+        help="Request evidence-grounded bug diagnosis from local SLM alongside deterministic static analysis.",
+    )
 
     # debug
     p_debug = subparsers.add_parser(
@@ -280,6 +287,11 @@ def create_parser() -> LocaldevArgumentParser:
         parents=[shared_options],
     )
     p_debug.add_argument("target", help="Explicit target Python source file.")
+    p_debug.add_argument(
+        "--diagnose",
+        action="store_true",
+        help="Request evidence-grounded bug diagnosis from local SLM alongside deterministic runtime traceback evidence.",
+    )
     p_debug.add_argument(
         "--stdin-file",
         help="Path to file supplying stdin for execution.",
@@ -433,6 +445,7 @@ def parse_cli_args(argv: Sequence[str]) -> ParsedCliCommand:
         keep_session=keep_session_flag,
         timeout=getattr(args, "timeout", None),
         fail_on_job_failure=bool(getattr(args, "fail_on_job_failure", False)),
+        diagnose=bool(getattr(args, "diagnose", False)),
     )
 
 
@@ -499,14 +512,26 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return EXIT_SUCCESS
 
             if parsed.command == "analyse":
-                analysis_report = orchestrator.analyse(target_record)
+                analysis_report = orchestrator.analyse(
+                    target_record,
+                    diagnose=parsed.diagnose,
+                )
                 if parsed.json_output:
+                    analysis_limitations: list[str] = []
+                    if (
+                        parsed.diagnose
+                        and isinstance(analysis_report.diagnosis, DiagnosisAbstention)
+                    ):
+                        analysis_limitations.append(
+                            f"Local SLM diagnosis abstained: {analysis_report.diagnosis.details}"
+                        )
                     analysis_envelope = JsonEnvelope[AnalysisReport](
                         command="analyse",
                         success=analysis_report.syntax_valid,
                         target_path=target_record.path,
                         data=analysis_report,
                         errors=[d.message for d in analysis_report.syntax_diagnostics],
+                        limitations=analysis_limitations,
                     )
                     write_json_envelope(analysis_envelope, sys.stdout)
                 else:
@@ -521,10 +546,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                     stdin_file=parsed.stdin_file,
                     timeout=parsed.timeout,
                     fail_on_job_failure=parsed.fail_on_job_failure,
+                    diagnose=parsed.diagnose,
                 )
                 is_success = exec_result.exit_code == 0 and not exec_result.timed_out
                 if parsed.json_output:
                     errors_list: list[str] = []
+                    debug_limitations: list[str] = []
                     if exec_result.error_signature:
                         errors_list.append(
                             f"{exec_result.error_signature.exception_type}: {exec_result.error_signature.normalized_message}"
@@ -534,12 +561,21 @@ def main(argv: Sequence[str] | None = None) -> int:
                     elif exec_result.exit_code != 0:
                         errors_list.append(f"Process exited with code {exec_result.exit_code}")
 
+                    if (
+                        parsed.diagnose
+                        and isinstance(exec_result.diagnosis, DiagnosisAbstention)
+                    ):
+                        debug_limitations.append(
+                            f"Local SLM diagnosis abstained: {exec_result.diagnosis.details}"
+                        )
+
                     debug_envelope = JsonEnvelope[ExecutionResult](
                         command="debug",
                         success=is_success,
                         target_path=target_record.path,
                         data=exec_result,
                         errors=errors_list,
+                        limitations=debug_limitations,
                     )
                     write_json_envelope(debug_envelope, sys.stdout)
                 else:

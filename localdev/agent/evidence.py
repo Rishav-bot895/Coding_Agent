@@ -13,6 +13,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pydantic import BaseModel, ConfigDict
+
 from localdev.agent.session import Session
 from localdev.execution.limits import ExecutionLimits
 from localdev.execution.runner import build_execution_request, run_execution_request
@@ -22,11 +24,11 @@ from localdev.schemas import (
     ErrorSignature,
     ExecutionResult,
     SeverityEnum,
+    TargetRecord,
 )
 
 if TYPE_CHECKING:
     from localdev.agent.orchestrator import Orchestrator
-    from localdev.schemas import TargetRecord
 
 
 def _read_target_text(target: TargetRecord, source_text: str | None = None) -> str:
@@ -212,3 +214,66 @@ def _execute_and_parse(
         error_signature=sig,
         frames=frames,
     )
+
+
+class DiagnosisEvidence(BaseModel):
+    """Aggregated static and runtime evidence bundle for diagnosis prompt construction."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    target: TargetRecord
+    source_text: str
+    analysis: AnalysisReport
+    execution: ExecutionResult | None = None
+
+
+def collect_diagnosis_evidence(
+    orchestrator: Orchestrator,
+    target: TargetRecord,
+    target_args: Sequence[str] | None = None,
+    stdin_file: str | Path | None = None,
+    timeout: float | None = None,
+    fail_on_job_failure: bool = False,
+    source_text: str | None = None,
+    run_execution: bool = True,
+) -> DiagnosisEvidence:
+    """Collect both static analysis and controlled runtime debug evidence.
+
+    1. Gathers static analysis report (syntax check, AST facts, Ruff diagnostics).
+    2. If syntax is valid and run_execution is True, executes target under -E -B -P
+       to collect runtime tracebacks, error signatures, and memory metrics.
+    3. Bundles evidence for the context builder.
+
+    Args:
+        orchestrator: Active agent orchestrator.
+        target: Validated target file metadata.
+        target_args: Optional CLI arguments passed after '--' to the target script.
+        stdin_file: Optional file path supplying standard input.
+        timeout: Optional wall-clock timeout override.
+        fail_on_job_failure: Whether to fail closed on Job Object failure.
+        source_text: Optional direct source code text override.
+        run_execution: Whether to execute target if syntax parsed cleanly.
+
+    Returns:
+        DiagnosisEvidence containing static analysis and runtime debug result.
+    """
+    source = _read_target_text(target, source_text=source_text)
+    analysis = orchestrator.analyse(target, source_text=source)
+
+    execution: ExecutionResult | None = None
+    if run_execution and analysis.syntax_valid:
+        execution = orchestrator.debug(
+            target,
+            target_args=target_args,
+            stdin_file=stdin_file,
+            timeout=timeout,
+            fail_on_job_failure=fail_on_job_failure,
+        )
+
+    return DiagnosisEvidence(
+        target=target,
+        source_text=source,
+        analysis=analysis,
+        execution=execution,
+    )
+

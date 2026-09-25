@@ -849,7 +849,7 @@ python -m mypy --strict localdev
 
 ## P7-T2 — Build compact, boundary-safe model context within prompt budget
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Assemble compact, bounded model prompts from deterministic facts (syntax, AST facts, normalized Ruff diagnostics, parsed traceback frames, and targeted source spans) strictly within a hard 1,200-token prompt budget (reserving 600 tokens for output and an explicit 248-token application safety margin in the 2,048-token context window) using prioritized truncation.
 
@@ -886,7 +886,7 @@ python -m mypy --strict localdev
 
 ## P7-T3 — Validate diagnosis responses and evidence grounding
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Parse model JSON responses against the diagnosis schema via application-side Pydantic validation, verify that cited line numbers and evidence IDs match actual supplied facts, retry once on malformed output, and abstain safely if invalid.
 
@@ -911,7 +911,7 @@ python -m mypy --strict localdev
 
 ## P7-T4 — Integrate static and runtime diagnosis flows
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Wire deterministic evidence collection and local SLM diagnosis into the `analyse` and `debug` command flows, presenting grounded explanations in terminal and JSON outputs.
 

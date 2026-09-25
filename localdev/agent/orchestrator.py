@@ -8,9 +8,10 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from localdev.agent.session import Session
-from localdev.errors import UnsupportedLanguageError
+from localdev.errors import InferenceError, UnsupportedLanguageError
 from localdev.languages.base import (
     AdapterRegistry,
     LanguageAdapter,
@@ -22,13 +23,20 @@ from localdev.schemas import (
     ComplexityReport,
     DetectionConfidence,
     DetectionResult,
+    DiagnosisAbstention,
+    DiagnosisAbstentionReason,
+    DiagnosisRecord,
     DiagnosticRecord,
     ExecutionResult,
     ExecutionSpec,
+    InferenceMetadata,
     TargetInfoRecord,
     TargetRecord,
     ValidationReport,
 )
+
+if TYPE_CHECKING:
+    from localdev.inference.base import BaseInferenceClient
 
 
 class Orchestrator:
@@ -143,15 +151,141 @@ class Orchestrator:
         adapter = self.resolve_adapter(target, source_text=source_text)
         return adapter.run_diagnostics(target, source_text=source_text)
 
+    def diagnose(
+        self,
+        target: TargetRecord,
+        analysis_report: AnalysisReport,
+        execution_result: ExecutionResult | None = None,
+        source_text: str | None = None,
+        inference_client: BaseInferenceClient | None = None,
+        model: str | None = None,
+    ) -> tuple[DiagnosisRecord | DiagnosisAbstention, InferenceMetadata | None]:
+        """Generate evidence-grounded bug diagnosis using local SLM.
+
+        1. Cross-file verification: if execution failed but traceback has no target frames,
+           abstain safely with explicit technical limitation.
+        2. Bounded prompt assembly: build compact context <= 1,200 tokens.
+        3. Inference client execution: connect to local SLM or abstain if unavailable.
+        4. Strict validation & single retry: validate schema, grounding, and line bounds.
+        """
+        # 1. Cross-file check
+        if execution_result is not None and (execution_result.exit_code != 0 or execution_result.timed_out):
+            target_frames = [f for f in execution_result.frames if f.is_target]
+            external_frames = [f for f in execution_result.frames if not f.is_target]
+            if not target_frames and external_frames:
+                fault_site = f"{external_frames[-1].file_path}:{external_frames[-1].line_number}"
+                return (
+                    DiagnosisAbstention(
+                        target=target.path,
+                        reason=DiagnosisAbstentionReason.UNGROUNDED_EVIDENCE,
+                        details=(
+                            f"Traceback indicates failure occurred in external library or dependency ({fault_site}) "
+                            f"without frames inside the target file. localdev enforces a single-target boundary "
+                            f"and only inspects '{target.path}'."
+                        ),
+                        retry_attempted=False,
+                    ),
+                    None,
+                )
+
+        # 2. Source text resolution
+        source = source_text
+        if source is None:
+            target_path = Path(target.absolute_path)
+            try:
+                source = target_path.read_text(encoding=target.encoding)
+            except (OSError, UnicodeDecodeError):
+                try:
+                    source = target_path.read_text(encoding="utf-8", errors="replace")
+                except (OSError, UnicodeDecodeError):
+                    source = ""
+
+        # 3. Context assembly
+        from localdev.agent.context_builder import build_diagnosis_context
+        from localdev.errors import PromptBudgetExceededError
+
+        try:
+            context = build_diagnosis_context(
+                target=target,
+                source_text=source,
+                analysis_report=analysis_report,
+                execution_result=execution_result,
+            )
+        except PromptBudgetExceededError as exc:
+            return (
+                DiagnosisAbstention(
+                    target=target.path,
+                    reason=DiagnosisAbstentionReason.PROMPT_BUDGET_EXCEEDED,
+                    details=f"Prompt context exceeded 1,200 token budget: {exc}",
+                    retry_attempted=False,
+                ),
+                None,
+            )
+
+        # 4. Inference client resolution
+        client = inference_client
+        if client is None:
+            from localdev.inference.ollama_client import OllamaClient
+
+            try:
+                client = OllamaClient()
+            except (InferenceError, OSError, RuntimeError) as exc:
+                return (
+                    DiagnosisAbstention(
+                        target=target.path,
+                        reason=DiagnosisAbstentionReason.MODEL_UNAVAILABLE,
+                        details=f"Failed to initialize local inference client: {exc}",
+                        retry_attempted=False,
+                    ),
+                    None,
+                )
+
+        if not client.is_available():
+            return (
+                DiagnosisAbstention(
+                    target=target.path,
+                    reason=DiagnosisAbstentionReason.MODEL_UNAVAILABLE,
+                    details="Local Ollama service (127.0.0.1:11434) is not running or unreachable.",
+                    retry_attempted=False,
+                ),
+                None,
+            )
+
+        # 5. Execute with validation and single automated retry
+        from localdev.inference.response_validator import execute_diagnosis_with_retry
+
+        total_lines = len(source.splitlines()) if source else 0
+        return execute_diagnosis_with_retry(
+            client=client,
+            messages=context.to_messages(),
+            target_path=target.path,
+            total_lines=total_lines,
+            evidence_manifest=context.evidence_manifest,
+            model=model,
+        )
+
     def analyse(
         self,
         target: TargetRecord,
         source_text: str | None = None,
+        diagnose: bool = False,
+        inference_client: BaseInferenceClient | None = None,
     ) -> AnalysisReport:
         """Run the deterministic analyse workflow for a target file."""
         from localdev.agent.evidence import collect_analysis_evidence
 
-        return collect_analysis_evidence(self, target, source_text=source_text)
+        report = collect_analysis_evidence(self, target, source_text=source_text)
+        if diagnose:
+            diag, meta = self.diagnose(
+                target=target,
+                analysis_report=report,
+                execution_result=None,
+                source_text=source_text,
+                inference_client=inference_client,
+            )
+            report.diagnosis = diag
+            report.inference_metadata = meta
+        return report
 
     def debug(
         self,
@@ -160,11 +294,13 @@ class Orchestrator:
         stdin_file: str | Path | None = None,
         timeout: float | None = None,
         fail_on_job_failure: bool = False,
+        diagnose: bool = False,
+        inference_client: BaseInferenceClient | None = None,
     ) -> ExecutionResult:
         """Run the deterministic debug execution and traceback evidence workflow."""
         from localdev.agent.evidence import collect_debug_evidence
 
-        return collect_debug_evidence(
+        exec_result = collect_debug_evidence(
             self,
             target,
             target_args=target_args,
@@ -172,6 +308,17 @@ class Orchestrator:
             timeout=timeout,
             fail_on_job_failure=fail_on_job_failure,
         )
+        if diagnose:
+            analysis_report = self.analyse(target)
+            diag, meta = self.diagnose(
+                target=target,
+                analysis_report=analysis_report,
+                execution_result=exec_result,
+                inference_client=inference_client,
+            )
+            exec_result.diagnosis = diag
+            exec_result.inference_metadata = meta
+        return exec_result
 
 
     def prepare_execution(

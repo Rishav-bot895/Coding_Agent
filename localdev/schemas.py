@@ -324,6 +324,12 @@ class ExecutionResult(BaseModel):
     frames: list[TracebackFrame] = Field(
         default_factory=list, description="Parsed traceback frames in order."
     )
+    diagnosis: DiagnosisRecord | DiagnosisAbstention | None = Field(
+        default=None, description="Evidence-grounded local SLM diagnosis or abstention report."
+    )
+    inference_metadata: InferenceMetadata | None = Field(
+        default=None, description="Inference token budgets and evaluation metadata."
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -399,6 +405,12 @@ class AnalysisReport(BaseModel):
     diagnostics: list[DiagnosticRecord] = Field(
         default_factory=list, description="Normalized static linter diagnostics (omitted on syntax error)."
     )
+    diagnosis: DiagnosisRecord | DiagnosisAbstention | None = Field(
+        default=None, description="Evidence-grounded local SLM diagnosis or abstention report."
+    )
+    inference_metadata: InferenceMetadata | None = Field(
+        default=None, description="Inference token budgets and evaluation metadata."
+    )
 
 
 # =============================================================================
@@ -430,6 +442,38 @@ class DiagnosisRecord(BaseModel):
     )
     rationale: str = Field(
         description="Logical reasoning linking cited evidence to the proposed cause."
+    )
+
+
+class DiagnosisAbstentionReason(str, Enum):
+    """Reason codes for diagnosis abstention."""
+
+    SCHEMA_VALIDATION_FAILED = "SCHEMA_VALIDATION_FAILED"
+    UNGROUNDED_EVIDENCE = "UNGROUNDED_EVIDENCE"
+    OUT_OF_BOUNDS_LINES = "OUT_OF_BOUNDS_LINES"
+    MALFORMED_JSON = "MALFORMED_JSON"
+    MODEL_UNAVAILABLE = "MODEL_UNAVAILABLE"
+    INFERENCE_TIMEOUT = "INFERENCE_TIMEOUT"
+    PROMPT_BUDGET_EXCEEDED = "PROMPT_BUDGET_EXCEEDED"
+    EMPTY_RESPONSE = "EMPTY_RESPONSE"
+
+
+class DiagnosisAbstention(BaseModel):
+    """Explicit abstention report emitted when model diagnosis cannot be reliably validated."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    target: str = Field(description="Target file path.")
+    reason: DiagnosisAbstentionReason = Field(description="Structured reason code for abstention.")
+    details: str = Field(description="Human-readable explanation of why diagnosis abstained.")
+    raw_payload: str | None = Field(
+        default=None, description="Raw model response payload if available."
+    )
+    validation_errors: list[str] = Field(
+        default_factory=list, description="Specific schema or grounding error messages."
+    )
+    retry_attempted: bool = Field(
+        default=False, description="Whether an automated schema-correction retry was attempted."
     )
 
 
@@ -693,3 +737,9 @@ class JsonEnvelope(BaseModel, Generic[T]):
     metadata: dict[str, Any] = Field(
         default_factory=dict, description="Command and environment metadata."
     )
+
+
+# Rebuild models with forward references to DiagnosisRecord and InferenceMetadata
+ExecutionResult.model_rebuild()
+AnalysisReport.model_rebuild()
+

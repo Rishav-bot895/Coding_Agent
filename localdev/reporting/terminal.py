@@ -16,7 +16,10 @@ from localdev.reporting.sanitizer import safe_terminal_encode, sanitize_terminal
 from localdev.schemas import (
     AnalysisReport,
     DetectionResult,
+    DiagnosisAbstention,
+    DiagnosisRecord,
     ExecutionResult,
+    InferenceMetadata,
     TargetInfoRecord,
     ValidationLevel,
 )
@@ -195,6 +198,10 @@ class TerminalReporter:
             diag_lines.append("")
             parts.append("\n".join(diag_lines))
 
+        # 4. Optional Model Diagnosis Section (if --diagnose was requested)
+        if report.diagnosis is not None:
+            parts.append(self.render_diagnosis(report.diagnosis, report.inference_metadata))
+
         full_text = "\n".join(parts)
         return sanitize_terminal_text(full_text) if self.enable_sanitization else full_text
 
@@ -264,8 +271,54 @@ class TerminalReporter:
             err_lines.append("")
             parts.append("\n".join(err_lines))
 
+        # 5. Optional Model Diagnosis Section (if --diagnose was requested)
+        if result.diagnosis is not None:
+            parts.append(self.render_diagnosis(result.diagnosis, result.inference_metadata))
+
         full_text = "\n".join(parts)
         return sanitize_terminal_text(full_text) if self.enable_sanitization else full_text
+
+    def render_diagnosis(
+        self,
+        diagnosis: DiagnosisRecord | DiagnosisAbstention,
+        metadata: InferenceMetadata | None = None,
+    ) -> str:
+        """Render evidence-grounded SLM diagnosis or safe abstention with clear separation."""
+        lines: list[str] = [
+            "================================================================================",
+            "MODEL DIAGNOSIS (Local SLM - Informational Only, Non-Executable)",
+            "================================================================================",
+        ]
+
+        if isinstance(diagnosis, DiagnosisRecord):
+            lines.append("  [Model Interpretation - Subject to Verification]")
+            lines.append(f"  Bug Description:       {diagnosis.bug_description}")
+            lines.append(f"  Root Cause:            {diagnosis.root_cause}")
+            lines.append(f"  Confidence:            {diagnosis.confidence.value}")
+            if diagnosis.cited_evidence_ids:
+                lines.append("  Cited Evidence:")
+                for eid in diagnosis.cited_evidence_ids:
+                    lines.append(f"    • {eid}")
+            lines.append(f"  Rationale:             {diagnosis.rationale}")
+
+            if metadata is not None:
+                lines.append("")
+                lines.append(
+                    f"  [Inference Metadata: {metadata.estimated_prompt_tokens} prompt tokens, "
+                    f"{metadata.eval_count or 0} output tokens, truncated={metadata.was_truncated}]"
+                )
+        elif isinstance(diagnosis, DiagnosisAbstention):
+            lines.append(f"  [!] Diagnosis Abstained: {diagnosis.reason.value}")
+            lines.append(f"      Details:           {diagnosis.details}")
+            if diagnosis.validation_errors:
+                lines.append("      Errors:")
+                for err in diagnosis.validation_errors:
+                    lines.append(f"        • {err}")
+            if diagnosis.retry_attempted:
+                lines.append("      (Automated correction retry was attempted)")
+
+        lines.append("")
+        return "\n".join(lines)
 
     def render_section(self, title: str, body: str) -> str:
         """Render a titled section with indentation."""
