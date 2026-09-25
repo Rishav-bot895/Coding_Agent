@@ -103,6 +103,7 @@ def collect_debug_evidence(
     target_args: Sequence[str] | None = None,
     stdin_file: str | Path | None = None,
     timeout: float | None = None,
+    fail_on_job_failure: bool = False,
 ) -> ExecutionResult:
     """Execute target under controlled runtime limits and collect traceback evidence.
 

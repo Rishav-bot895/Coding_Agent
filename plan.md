@@ -820,7 +820,7 @@ python -m mypy --strict localdev
 
 ## P7-T1 — Implement the inference abstraction and Ollama client
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Implement a local HTTP inference client for Ollama (`http://127.0.0.1:11434`), enforcing separated token budgets (2,048 context window, 1,200 prompt budget, 600 output budget, 248 application safety margin), structured JSON Schema constrained requests using simple Pydantic schemas tested against the pinned Ollama engine, application-side Pydantic validation, error handling, usage metrics capture, and model lifecycle control.
 

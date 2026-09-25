@@ -159,6 +159,7 @@ class Orchestrator:
         target_args: Sequence[str] | None = None,
         stdin_file: str | Path | None = None,
         timeout: float | None = None,
+        fail_on_job_failure: bool = False,
     ) -> ExecutionResult:
         """Run the deterministic debug execution and traceback evidence workflow."""
         from localdev.agent.evidence import collect_debug_evidence
@@ -169,6 +170,7 @@ class Orchestrator:
             target_args=target_args,
             stdin_file=stdin_file,
             timeout=timeout,
+            fail_on_job_failure=fail_on_job_failure,
         )
 
 

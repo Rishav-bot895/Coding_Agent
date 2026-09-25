@@ -53,6 +53,7 @@ testpaths = ["tests"]
 markers = [
     "windows: tests that require native Windows 11 x64 APIs (Job Objects, ReplaceFileW, etc.)",
     "integration: integration tests exercising multiple subsystems end-to-end",
+    "ollama: tests requiring a running local Ollama instance",
 ]
 
 [tool.mypy]

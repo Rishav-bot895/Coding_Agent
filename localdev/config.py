@@ -15,6 +15,7 @@ from localdev.constants import (
     APPLICATION_SAFETY_MARGIN_TOKENS,
     CHARS_PER_TOKEN_HEURISTIC,
     CONTEXT_WINDOW_TOKENS,
+    DEFAULT_INFERENCE_TIMEOUT_SECONDS,
     DEFAULT_KEEP_ALIVE_SECONDS,
     DEFAULT_OLLAMA_URL,
     DEFAULT_OUTPUT_BYTE_CAP,
@@ -101,6 +102,11 @@ class LocaldevConfig(BaseModel):
         default=DEFAULT_KEEP_ALIVE_SECONDS,
         ge=0,
         description="Ollama keep_alive parameter in seconds. 0 indicates immediate unload.",
+    )
+    inference_timeout_seconds: float = Field(
+        default=DEFAULT_INFERENCE_TIMEOUT_SECONDS,
+        gt=0.0,
+        description="Timeout in seconds for local SLM HTTP inference requests.",
     )
 
     # Operational & debugging flags

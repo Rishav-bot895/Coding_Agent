@@ -105,6 +105,44 @@ class InferenceError(LocaldevError):
         self.status_code = status_code
 
 
+class NonLocalUrlError(InferenceError):
+    """Raised when an external or non-loopback URL is supplied for Ollama inference."""
+
+
+class OllamaConnectionError(InferenceError):
+    """Raised when Ollama HTTP service is unreachable or not running."""
+
+
+class OllamaTimeoutError(InferenceError):
+    """Raised when an Ollama inference request times out."""
+
+
+class OllamaModelNotFoundError(InferenceError):
+    """Raised when the requested model is not installed/pulled in Ollama."""
+
+    def __init__(self, message: str, model_name: str | None = None) -> None:
+        super().__init__(message, status_code=404)
+        self.model_name = model_name
+
+
+class OllamaContextExceededError(InferenceError):
+    """Raised when prompt or context exceeds configured context window limits."""
+
+
+class PromptBudgetExceededError(InferenceError):
+    """Raised when assembled prompt exceeds the application prompt token budget."""
+
+    def __init__(
+        self,
+        message: str,
+        estimated_tokens: int,
+        prompt_budget: int,
+    ) -> None:
+        super().__init__(message)
+        self.estimated_tokens = estimated_tokens
+        self.prompt_budget = prompt_budget
+
+
 class SchemaValidationError(InferenceError):
     """Raised when model JSON output fails strict Pydantic schema validation."""
 

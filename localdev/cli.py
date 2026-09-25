@@ -69,6 +69,7 @@ class ParsedCliCommand:
     input_file: str | None = None
     keep_session: bool = False
     timeout: float | None = None
+    fail_on_job_failure: bool = False
 
 
 
@@ -288,6 +289,11 @@ def create_parser() -> LocaldevArgumentParser:
         type=float,
         help="Maximum execution duration in seconds before termination.",
     )
+    p_debug.add_argument(
+        "--fail-on-job-failure",
+        action="store_true",
+        help="Abort execution with non-zero exit code if Windows Job Object creation or assignment fails.",
+    )
 
     # fix
     p_fix = subparsers.add_parser(
@@ -426,6 +432,7 @@ def parse_cli_args(argv: Sequence[str]) -> ParsedCliCommand:
         input_file=getattr(args, "input_file", None),
         keep_session=keep_session_flag,
         timeout=getattr(args, "timeout", None),
+        fail_on_job_failure=bool(getattr(args, "fail_on_job_failure", False)),
     )
 
 
@@ -513,6 +520,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     target_args=parsed.target_args,
                     stdin_file=parsed.stdin_file,
                     timeout=parsed.timeout,
+                    fail_on_job_failure=parsed.fail_on_job_failure,
                 )
                 is_success = exec_result.exit_code == 0 and not exec_result.timed_out
                 if parsed.json_output:

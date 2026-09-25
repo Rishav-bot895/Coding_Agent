@@ -20,8 +20,6 @@ from __future__ import annotations
 
 import io
 import json
-import os
-import sys
 import time
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -37,7 +35,6 @@ from localdev.execution.process_tree import is_process_running
 from localdev.execution.runner import build_execution_request, run_execution_request
 from localdev.execution.windows_job import (
     ERROR_ACCESS_DENIED,
-    WindowsJobObject,
     get_kernel32,
 )
 

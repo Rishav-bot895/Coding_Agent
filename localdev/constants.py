@@ -79,6 +79,7 @@ APPLICATION_SAFETY_MARGIN_TOKENS: Final[int] = 248
 DEFAULT_OLLAMA_URL: Final[str] = "http://127.0.0.1:11434"
 CHARS_PER_TOKEN_HEURISTIC: Final[float] = 3.5
 DEFAULT_KEEP_ALIVE_SECONDS: Final[int] = 0
+DEFAULT_INFERENCE_TIMEOUT_SECONDS: Final[float] = 30.0
 
 # -----------------------------------------------------------------------------
 # Patching and Guarded Mutation Limits
