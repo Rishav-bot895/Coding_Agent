@@ -120,6 +120,7 @@ def collect_debug_evidence(
         target_args: Optional CLI arguments passed after '--' to the target script.
         stdin_file: Optional file path supplying standard input.
         timeout: Optional wall-clock timeout override.
+        fail_on_job_failure: Whether to fail closed on Job Object creation/assignment failure.
 
     Returns:
         ExecutionResult containing exit code, outputs, elapsed time,
@@ -137,6 +138,7 @@ def collect_debug_evidence(
             target_args=target_args,
             stdin_file=stdin_file,
             timeout=timeout,
+            fail_on_job_failure=fail_on_job_failure,
         )
 
     with Session(target_record=target) as temp_session:
@@ -147,6 +149,7 @@ def collect_debug_evidence(
             target_args=target_args,
             stdin_file=stdin_file,
             timeout=timeout,
+            fail_on_job_failure=fail_on_job_failure,
         )
 
 
@@ -156,6 +159,7 @@ def _execute_and_parse(
     target_args: Sequence[str] | None = None,
     stdin_file: str | Path | None = None,
     timeout: float | None = None,
+    fail_on_job_failure: bool = False,
 ) -> ExecutionResult:
     """Subprocess execution helper for debug evidence collection."""
     req = build_execution_request(
@@ -166,9 +170,9 @@ def _execute_and_parse(
     )
 
     limits = (
-        ExecutionLimits(timeout_seconds=timeout)
+        ExecutionLimits(timeout_seconds=timeout, fail_on_job_failure=fail_on_job_failure)
         if timeout is not None
-        else ExecutionLimits()
+        else ExecutionLimits(fail_on_job_failure=fail_on_job_failure)
     )
     raw_result = run_execution_request(req, limits=limits)
 
@@ -201,6 +205,8 @@ def _execute_and_parse(
         timed_out=raw_result.timed_out,
         output_truncated=raw_result.output_truncated,
         peak_process_tree_rss_bytes=raw_result.peak_process_tree_rss_bytes,
+        approximate_peak_process_tree_rss_bytes=raw_result.approximate_peak_process_tree_rss_bytes,
+        memory_metrics=raw_result.memory_metrics,
         execution_backend=raw_result.execution_backend,
         error_signature=sig,
         frames=frames,

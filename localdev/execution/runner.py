@@ -17,10 +17,15 @@ from typing import IO, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from localdev.errors import JobObjectAssignmentError, JobObjectError
 from localdev.execution.environment import build_clean_environment
 from localdev.execution.limits import ExecutionLimits
 from localdev.execution.output_capture import OutputCollector, PipeDrainer
-from localdev.execution.process_tree import terminate_process_tree
+from localdev.execution.process_tree import (
+    ProcessTreeMemoryMonitor,
+    terminate_process_tree,
+)
+from localdev.execution.windows_job import WindowsJobObject
 from localdev.schemas import ExecutionResult
 
 
@@ -117,32 +122,45 @@ def build_execution_request(
 
 def _terminate_process(proc: subprocess.Popen[bytes]) -> None:
     """Terminate a subprocess and its entire descendant process tree."""
-    terminate_process_tree(proc, graceful_timeout=0.5, kill_timeout=0.5)
+    terminate_process_tree(proc, graceful_timeout=0.5, kill_timeout=0.5, close_handles=False)
 
 
 def run_execution_request(
     request: ExecutionRequest,
     limits: ExecutionLimits | None = None,
     timeout: float | None = None,
+    fail_on_job_failure: bool | None = None,
 ) -> ExecutionResult:
     """Execute the target subprocess request under controlled limits.
 
-    Concurrently drains stdout and stderr pipes into a byte-capped OutputCollector
-    to prevent pipe buffer deadlocks and memory exhaustion. Enforces wall-clock timeout
-    and output byte limits, terminating the subprocess on breach and capturing partial output.
+    Prefers Windows Job Object for robust kernel-enforced process containment,
+    falling back seamlessly to psutil process-tree management if Job Object
+    assignment fails (e.g. in nested IDE terminal environments lacking breakaway
+    permissions). Concurrently drains stdout and stderr pipes into a byte-capped
+    OutputCollector to prevent pipe buffer deadlocks and memory exhaustion. Periodically
+    samples aggregate process-tree resident set size (RSS) via background monitoring.
 
     Args:
         request: Prepared ExecutionRequest to execute.
-        limits: Optional ExecutionLimits specifying timeout and byte caps.
+        limits: Optional ExecutionLimits specifying timeout, byte caps, and memory sampling.
         timeout: Optional wall-clock timeout override in seconds.
+        fail_on_job_failure: Optional strict mode flag; if True, abort execution
+            when Job Object creation or assignment fails.
 
     Returns:
         Structured ExecutionResult with exit code, outputs, elapsed time,
-        and limit breach indicators (timed_out, output_truncated).
+        active containment backend, sampled peak process RSS, and limit breach indicators.
     """
     effective_limits = limits or ExecutionLimits()
     timeout_seconds = timeout if timeout is not None else effective_limits.timeout_seconds
     output_byte_cap = effective_limits.output_byte_cap
+    strict_job_failure = (
+        fail_on_job_failure
+        if fail_on_job_failure is not None
+        else effective_limits.fail_on_job_failure
+    )
+    prefer_job = effective_limits.prefer_job_object and sys.platform == "win32"
+    sample_interval = effective_limits.sample_interval_seconds
 
     collector = OutputCollector(byte_cap=output_byte_cap)
     input_bytes: bytes | None = None
@@ -151,8 +169,19 @@ def run_execution_request(
     output_truncated = False
 
     stdin_source: int | IO[bytes] | None = None
+    backend: Literal["windows_job", "psutil_fallback"] = "psutil_fallback"
+    job: WindowsJobObject | None = None
 
     with ExitStack() as stack:
+        # Pre-create Job Object if preferred on Windows
+        if prefer_job:
+            try:
+                job = stack.enter_context(WindowsJobObject(kill_on_close=True))
+            except JobObjectError:
+                if strict_job_failure:
+                    raise
+                job = None
+
         if request.stdin_file is not None:
             stdin_source = stack.enter_context(open(request.stdin_file, "rb"))
         elif request.stdin_data is not None:
@@ -171,6 +200,23 @@ def run_execution_request(
             shell=False,
         )
 
+        # Start periodic background process tree RSS memory monitor
+        memory_monitor = stack.enter_context(
+            ProcessTreeMemoryMonitor(proc, interval_seconds=sample_interval)
+        )
+
+        if job is not None:
+            try:
+                job.assign_process(proc)
+                backend = "windows_job"
+            except JobObjectAssignmentError:
+                if strict_job_failure:
+                    _terminate_process(proc)
+                    raise
+                job.close()
+                job = None
+                backend = "psutil_fallback"
+
         drainer = PipeDrainer(
             stdout_stream=proc.stdout,
             stderr_stream=proc.stderr,
@@ -180,19 +226,27 @@ def run_execution_request(
         )
         drainer.start()
 
+        def do_terminate() -> None:
+            _terminate_process(proc)
+            if job is not None and not job.is_closed:
+                try:
+                    job.terminate(exit_code=1)
+                except JobObjectError:
+                    pass
+
         while True:
             if proc.poll() is not None:
                 break
 
             if collector.cap_reached_event.is_set():
                 output_truncated = True
-                _terminate_process(proc)
+                do_terminate()
                 break
 
             elapsed = time.perf_counter() - start_time
             if elapsed >= timeout_seconds:
                 timed_out = True
-                _terminate_process(proc)
+                do_terminate()
                 break
 
             collector.cap_reached_event.wait(timeout=0.01)
@@ -209,13 +263,16 @@ def run_execution_request(
 
         # Ensure process has fully exited
         if proc.poll() is None:
-            _terminate_process(proc)
+            do_terminate()
 
         returncode = proc.returncode if proc.returncode is not None else -1
 
     duration = time.perf_counter() - start_time
     if collector.is_truncated:
         output_truncated = True
+
+    peak_rss = memory_monitor.peak_rss_bytes
+    memory_metrics = memory_monitor.get_metrics()
 
     return ExecutionResult(
         exit_code=returncode,
@@ -224,4 +281,8 @@ def run_execution_request(
         duration_seconds=duration,
         timed_out=timed_out,
         output_truncated=output_truncated,
+        peak_process_tree_rss_bytes=peak_rss,
+        approximate_peak_process_tree_rss_bytes=peak_rss,
+        memory_metrics=memory_metrics,
+        execution_backend=backend,
     )

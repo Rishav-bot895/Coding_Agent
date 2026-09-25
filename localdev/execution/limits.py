@@ -33,4 +33,18 @@ class ExecutionLimits(BaseModel):
         gt=0,
         description="Optional maximum process RSS memory limit in bytes.",
     )
+    fail_on_job_failure: bool = Field(
+        default=False,
+        description="Whether to fail closed if Windows Job Object creation or assignment fails.",
+    )
+    prefer_job_object: bool = Field(
+        default=True,
+        description="Whether to prefer Windows Job Object for process containment on Windows.",
+    )
+    sample_interval_seconds: float = Field(
+        default=0.02,
+        gt=0.0,
+        description="Sampling interval in seconds for process tree RSS measurement.",
+    )
+
 

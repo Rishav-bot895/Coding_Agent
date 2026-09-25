@@ -254,6 +254,45 @@ class ExecutionSpec(BaseModel):
     )
 
 
+class ProcessMemoryMetrics(BaseModel):
+    """Periodic sampling metrics and approximation metadata for process-tree RSS memory.
+
+    Architectural Memory Separation Notice:
+    1. Target Python process-tree RSS: Measured here. OS resident physical memory pages
+       mapped across the target process and all descendant processes.
+    2. Windows Job Object limits: Win32 kernel quota limits (JOB_OBJECT_LIMIT_PROCESS_MEMORY),
+       which enforce bounds rather than measure active consumption.
+    3. Python tracemalloc heap allocations (Phase 11): Tracked within the Python runtime
+       measuring object allocations, excluding interpreter, C extensions, and shared libraries.
+    4. Ollama server and model memory residency: External service footprint (system RAM/VRAM),
+       strictly excluded from target process accounting.
+    5. Total system committed RAM: Operating system commit charge across all system processes.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    approximate_peak_process_tree_rss_bytes: int = Field(
+        ge=0,
+        description="Approximate peak resident set size (RSS) in bytes across target and descendants.",
+    )
+    sample_count: int = Field(
+        ge=0,
+        description="Total number of periodic background RSS samples collected during execution.",
+    )
+    sample_interval_seconds: float = Field(
+        ge=0.0,
+        description="Configured sampling period in seconds (default: 0.02s / 20ms).",
+    )
+    metric_type: Literal["process_tree_rss"] = Field(
+        default="process_tree_rss",
+        description="Explicit identifier distinguishing process RSS from heap, job limits, and Ollama.",
+    )
+    is_approximation: bool = Field(
+        default=True,
+        description="Indicates sampled periodic approximation rather than hardware PMU peak.",
+    )
+
+
 class ExecutionResult(BaseModel):
     """Result of controlled target subprocess execution under -E -B -P."""
 
@@ -270,6 +309,12 @@ class ExecutionResult(BaseModel):
     peak_process_tree_rss_bytes: int | None = Field(
         default=None, ge=0, description="Approximate peak RSS of process tree."
     )
+    approximate_peak_process_tree_rss_bytes: int | None = Field(
+        default=None, ge=0, description="Approximate peak RSS of process tree."
+    )
+    memory_metrics: ProcessMemoryMetrics | None = Field(
+        default=None, description="Detailed periodic RSS sampling metrics and metadata."
+    )
     execution_backend: Literal["windows_job", "psutil_fallback"] = Field(
         default="windows_job", description="Active process containment backend."
     )
@@ -279,6 +324,18 @@ class ExecutionResult(BaseModel):
     frames: list[TracebackFrame] = Field(
         default_factory=list, description="Parsed traceback frames in order."
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _sync_rss_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            peak = data.get("peak_process_tree_rss_bytes")
+            approx = data.get("approximate_peak_process_tree_rss_bytes")
+            if peak is not None and approx is None:
+                data["approximate_peak_process_tree_rss_bytes"] = peak
+            elif approx is not None and peak is None:
+                data["peak_process_tree_rss_bytes"] = approx
+        return data
 
 
 # =============================================================================

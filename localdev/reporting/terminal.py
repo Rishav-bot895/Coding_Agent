@@ -212,6 +212,12 @@ class TerminalReporter:
         summary_lines.append(f"  Status:                {status_str}")
         summary_lines.append(f"  Exit Code:             {result.exit_code}")
         summary_lines.append(f"  Duration:              {result.duration_seconds:.3f}s")
+        summary_lines.append(f"  Backend:               {result.execution_backend}")
+        if result.peak_process_tree_rss_bytes is not None:
+            rss_mb = result.peak_process_tree_rss_bytes / (1024 * 1024)
+            summary_lines.append(
+                f"  Peak Process RSS:      {rss_mb:.2f} MB (approximate, sampled)"
+            )
         if result.timed_out:
             summary_lines.append("  Timed Out:             YES")
         if result.output_truncated:

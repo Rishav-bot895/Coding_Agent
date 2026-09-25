@@ -788,7 +788,7 @@ python -m mypy --strict localdev
 
 ## P6-T3 — Measure and label process-tree memory
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Periodically sample the RSS memory of the target process tree during execution, reporting the approximate peak RSS and clearly distinguishing process RSS from Python heap allocations, Job Object limits, and external Ollama service residency.
 
