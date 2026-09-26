@@ -73,6 +73,26 @@ class MultipleTargetsError(CliUsageError):
     """Raised when multiple positional targets are supplied to a single-target command."""
 
 
+class ProfileInputError(CliUsageError):
+    """Raised when profiling input JSON is malformed, oversized, deeply nested, or invalid."""
+
+
+class TargetInvocationError(LocaldevError):
+    """Raised when the target callable raises an unhandled exception during profiling."""
+
+    def __init__(
+        self,
+        message: str,
+        original_exception_type: str | None = None,
+        invocation_index: int | None = None,
+        is_warmup: bool = False,
+    ) -> None:
+        super().__init__(message, exit_code=EXIT_TARGET_FAILURE)
+        self.original_exception_type = original_exception_type
+        self.invocation_index = invocation_index
+        self.is_warmup = is_warmup
+
+
 class ResourceBreachError(LocaldevError):
     """Raised when execution exceeds wall-clock timeout or output byte cap."""
 

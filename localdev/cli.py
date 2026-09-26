@@ -42,6 +42,7 @@ from localdev.schemas import (
     ExecutionResult,
     FixReport,
     JsonEnvelope,
+    ProfileReport,
     TargetInfoRecord,
 )
 
@@ -78,6 +79,8 @@ class ParsedCliCommand:
     fail_on_job_failure: bool = False
     diagnose: bool = False
     propose_only: bool = False
+    warmup: int | None = None
+    measured: int | None = None
 
 
 
@@ -389,6 +392,26 @@ def create_parser() -> LocaldevArgumentParser:
         dest="input_file",
         help="Path to JSON file supplying positional/keyword arguments to function.",
     )
+    p_profile.add_argument(
+        "--warmup",
+        type=int,
+        help="Number of warm-up iterations (default: 2).",
+    )
+    p_profile.add_argument(
+        "--measured",
+        type=int,
+        help="Number of measured iterations (default: 7).",
+    )
+    p_profile.add_argument(
+        "--timeout",
+        type=float,
+        help="Maximum execution duration in seconds before termination.",
+    )
+    p_profile.add_argument(
+        "--fail-on-job-failure",
+        action="store_true",
+        help="Abort execution with non-zero exit code if Windows Job Object creation or assignment fails.",
+    )
 
     return parser
 
@@ -479,6 +502,8 @@ def parse_cli_args(argv: Sequence[str]) -> ParsedCliCommand:
         fail_on_job_failure=bool(getattr(args, "fail_on_job_failure", False)),
         diagnose=bool(getattr(args, "diagnose", False)),
         propose_only=bool(getattr(args, "propose_only", False)),
+        warmup=getattr(args, "warmup", None),
+        measured=getattr(args, "measured", None),
     )
 
 
@@ -501,7 +526,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         is_json = parsed.json_output
 
         # For commands not yet wired, preserve the stub initialization line
-        if parsed.command not in ("info", "detect", "analyse", "debug", "fix", "complexity"):
+        if parsed.command not in ("info", "detect", "analyse", "debug", "fix", "complexity", "profile"):
             sys.stdout.write(
                 f"localdev {parsed.command}: initialized for target '{parsed.target_file}'.\n"
             )
@@ -716,6 +741,49 @@ def main(argv: Sequence[str] | None = None) -> int:
                     return EXIT_TARGET_FAILURE
                 if not all_established:
                     return EXIT_ABSTENTION
+                return EXIT_SUCCESS
+
+            if parsed.command == "profile":
+                if not parsed.selector:
+                    raise CliUsageError(
+                        "Command 'profile' requires an explicit function or method selector "
+                        "(e.g. 'script.py::function_name' or 'script.py::Class.method')."
+                    )
+
+                profile_report = orchestrator.profile(
+                    target=target_record,
+                    selector=parsed.selector,
+                    input_file=parsed.input_file,
+                    warmup_runs=parsed.warmup,
+                    measured_runs=parsed.measured,
+                    timeout=parsed.timeout,
+                    fail_on_job_failure=parsed.fail_on_job_failure,
+                )
+
+                if parsed.json_output:
+                    prof_envelope = JsonEnvelope[ProfileReport](
+                        command="profile",
+                        success=True,
+                        target_path=f"{target_record.path}::{parsed.selector}",
+                        data=profile_report,
+                    )
+                    write_json_envelope(prof_envelope, sys.stdout)
+                else:
+                    reporter = TerminalReporter(sys.stdout)
+                    disp_target = f"{target_record.path}::{parsed.selector}"
+                    reporter.write(
+                        reporter.render_profile_report(
+                            target=disp_target,
+                            import_ms=profile_report.import_duration_ms,
+                            latency_median_ms=profile_report.median_latency_ms,
+                            latency_dispersion_ms=profile_report.dispersion_ms,
+                            tracemalloc_bytes=profile_report.python_allocations_tracemalloc_bytes,
+                            rss_bytes=profile_report.approximate_process_tree_rss_bytes,
+                            warmup_runs=profile_report.warmup_invocations,
+                            measured_runs=profile_report.measured_invocations,
+                            hot_process=profile_report.hot_process_reused,
+                        )
+                    )
                 return EXIT_SUCCESS
 
         return EXIT_SUCCESS

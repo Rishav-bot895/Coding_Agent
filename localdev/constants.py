@@ -113,6 +113,14 @@ COMPLEXITY_ABSTENTION_REASONS: Final[tuple[str, ...]] = (
 )
 
 # -----------------------------------------------------------------------------
+# Profiling Limits (Phase 11)
+# -----------------------------------------------------------------------------
+MAX_PROFILE_INPUT_BYTES: Final[int] = 1024 * 1024  # 1 MB
+MAX_PROFILE_INPUT_DEPTH: Final[int] = 20  # Maximum JSON nesting depth
+DEFAULT_WARMUP_INVOCATIONS: Final[int] = 2
+DEFAULT_MEASURED_INVOCATIONS: Final[int] = 7
+
+# -----------------------------------------------------------------------------
 # Stable CLI Exit Codes
 # -----------------------------------------------------------------------------
 EXIT_SUCCESS: Final[int] = 0
@@ -122,4 +130,5 @@ EXIT_TARGET_IO_ERROR: Final[int] = 3
 EXIT_TIMEOUT_RESOURCE_BREACH: Final[int] = 4
 EXIT_INFERENCE_ERROR: Final[int] = 5
 EXIT_ABSTENTION: Final[int] = 6
+
 

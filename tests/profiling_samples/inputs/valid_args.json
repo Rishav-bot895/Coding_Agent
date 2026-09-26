@@ -1,0 +1,7 @@
+{
+  "args": [10, 20, 30],
+  "kwargs": {
+    "label": "benchmark",
+    "verbose": true
+  }
+}

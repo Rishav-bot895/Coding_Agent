@@ -1289,7 +1289,7 @@ python -m mypy --strict localdev
 
 ## P11-T2 — Define JSON inputs and recreate them for each run
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Parse and validate user-supplied JSON argument files (`--input`), deeply recreating fresh argument structures for every warm-up and measured run to prevent argument mutation contamination.
 
@@ -1311,7 +1311,7 @@ python -m mypy --strict localdev
 
 ## P11-T3 — Measure repeated function time and Python allocations under hot-process semantics
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Execute warm-up and measured function invocations under hot-process semantics in the worker subprocess, measuring execution time with high-resolution timers and tracking Python heap allocations with `tracemalloc`.
 
@@ -1339,7 +1339,7 @@ python -m mypy --strict localdev
 
 ## P11-T4 — Add parent-side process RSS sampling and deliver `profile`
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Monitor the worker subprocess tree externally from the parent process to sample peak process RSS, integrating import metrics, function timings, peak tracemalloc-tracked Python allocations, and process RSS into the `profile` command report.
 

@@ -13,8 +13,18 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from localdev.errors import MalformedSelectorError, SelectorNotFoundError
+from localdev.constants import (
+    DEFAULT_MEASURED_INVOCATIONS,
+    DEFAULT_WARMUP_INVOCATIONS,
+)
+from localdev.errors import (
+    MalformedSelectorError,
+    ProfileInputError,
+    SelectorNotFoundError,
+    TargetInvocationError,
+)
 from localdev.languages.python.selectors import resolve_callable_from_module
+from localdev.profiling.benchmark import ProfileInputManager, run_benchmark
 from localdev.profiling.loader import (
     RESPONSE_SENTINEL,
     TargetImportError,
@@ -42,7 +52,24 @@ def create_worker_parser() -> argparse.ArgumentParser:
         "--mode",
         choices=["load_only", "profile"],
         default="load_only",
-        help="Execution mode (load_only for P11-T1).",
+        help="Execution mode (load_only for P11-T1, profile for P11-T3).",
+    )
+    parser.add_argument(
+        "--input",
+        dest="input_file",
+        help="Path to JSON file supplying positional/keyword arguments to function.",
+    )
+    parser.add_argument(
+        "--warmup",
+        type=int,
+        default=DEFAULT_WARMUP_INVOCATIONS,
+        help="Number of warm-up invocations before measurement.",
+    )
+    parser.add_argument(
+        "--measured",
+        type=int,
+        default=DEFAULT_MEASURED_INVOCATIONS,
+        help="Number of measured invocations to record.",
     )
     parser.add_argument(
         "--response-file",
@@ -71,9 +98,35 @@ def main(argv: Sequence[str] | None = None) -> int:
         "is_method": False,
         "error_type": None,
         "error_message": None,
+        "input_valid": False,
+        "args_count": 0,
+        "kwargs_keys": [],
     }
 
-    # Step 1: Direct file-based module load
+    # Step 1: Input argument validation (if --input provided)
+    if args.input_file:
+        try:
+            input_mgr = ProfileInputManager.from_file(args.input_file)
+            result["input_valid"] = True
+            result["args_count"] = len(input_mgr.args)
+            result["kwargs_keys"] = list(input_mgr.kwargs.keys())
+        except ProfileInputError as pie:
+            result["error_type"] = "ProfileInputError"
+            result["error_message"] = str(pie)
+            _write_response(result, resp_file)
+            return 0
+        except (OSError, UnicodeDecodeError) as exc:
+            result["error_type"] = type(exc).__name__
+            result["error_message"] = f"Failed to read input file: {exc}"
+            _write_response(result, resp_file)
+            return 0
+    else:
+        input_mgr = ProfileInputManager.empty()
+        result["input_valid"] = True
+        result["args_count"] = 0
+        result["kwargs_keys"] = []
+
+    # Step 2: Direct file-based module load
     try:
         module, import_duration_ms, import_stdout, import_stderr = load_module_from_path(
             target_path, module_name="profile_target"
@@ -96,9 +149,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         _write_response(result, resp_file)
         return 0
 
-    # Step 2: Selector resolution on loaded module
+    # Step 3: Selector resolution on loaded module
+    callable_obj = None
     try:
-        _callable_obj, qualname, is_method = resolve_callable_from_module(
+        callable_obj, qualname, is_method = resolve_callable_from_module(
             module=module,
             selector=selector,
             target_path=str(target_path),
@@ -112,6 +166,33 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (AttributeError, TypeError, ValueError) as exc:
         result["error_type"] = type(exc).__name__
         result["error_message"] = f"Unexpected resolution error: {exc}"
+
+    # Step 4: Hot-process benchmark execution (if mode == "profile" and resolution succeeded)
+    if args.mode == "profile" and result["success"] and callable_obj is not None:
+        try:
+            bench_res = run_benchmark(
+                target_callable=callable_obj,
+                input_manager=input_mgr,
+                warmup_runs=args.warmup,
+                measured_runs=args.measured,
+            )
+            result["warmup_runs"] = bench_res.warmup_runs
+            result["measured_runs"] = bench_res.measured_runs
+            result["warmup_durations_ns"] = bench_res.warmup_durations_ns
+            result["warmup_allocations_bytes"] = bench_res.warmup_allocations_bytes
+            result["timing"] = bench_res.timing.model_dump()
+            result["memory"] = bench_res.memory.model_dump()
+            result["hot_process_semantics"] = bench_res.hot_process_semantics
+            result["semantics_note"] = bench_res.semantics_note
+            result["memory_note"] = bench_res.memory_note
+        except TargetInvocationError as tie:
+            result["success"] = False
+            result["error_type"] = type(tie).__name__
+            result["error_message"] = str(tie)
+        except Exception as exc:  # noqa: BLE001 - worker subprocess boundary isolates target failures
+            result["success"] = False
+            result["error_type"] = type(exc).__name__
+            result["error_message"] = f"Profiling failed unexpectedly: {exc}"
 
     _write_response(result, resp_file)
     return 0

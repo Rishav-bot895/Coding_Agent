@@ -33,6 +33,7 @@ from localdev.schemas import (
     ExecutionSpec,
     FixReport,
     InferenceMetadata,
+    ProfileReport,
     TargetInfoRecord,
     TargetRecord,
     ValidationReport,
@@ -352,6 +353,94 @@ class Orchestrator:
         """Perform static algorithmic complexity analysis for all functions/methods in target."""
         adapter = self.resolve_adapter(target, source_text=source_text)
         return adapter.analyze_file_complexity(target, source_text=source_text)
+
+    def profile(
+        self,
+        target: TargetRecord,
+        selector: str,
+        *,
+        input_file: Path | str | None = None,
+        warmup_runs: int | None = None,
+        measured_runs: int | None = None,
+        timeout: float | None = None,
+        fail_on_job_failure: bool = False,
+    ) -> ProfileReport:
+        """Profile a target function or method under hot-process semantics.
+
+        Executes module import and repeated invocations in a disposable worker
+        subprocess, sampling process tree RSS externally from the parent process
+        and tracking execution latency and tracemalloc heap allocations.
+
+        Args:
+            target: Validated TargetRecord.
+            selector: Function or method selector string.
+            input_file: Optional path to JSON input file.
+            warmup_runs: Optional warm-up run count override.
+            measured_runs: Optional measured run count override.
+            timeout: Subprocess timeout in seconds.
+            fail_on_job_failure: Strict failure flag for Job Object.
+
+        Returns:
+            Validated ProfileReport separating import, latency, heap, and RSS.
+
+        Raises:
+            ExecutionTimeoutError: If profiling exceeds configured timeout.
+            ProfileInputError: If JSON input file fails validation.
+            MalformedSelectorError: If selector syntax is invalid.
+            SelectorNotFoundError: If selector cannot be resolved in module.
+            TargetInvocationError: If function raises an unhandled exception or import fails.
+        """
+        from localdev.constants import (
+            DEFAULT_MEASURED_INVOCATIONS,
+            DEFAULT_TIMEOUT_SECONDS,
+            DEFAULT_WARMUP_INVOCATIONS,
+        )
+        from localdev.errors import (
+            ExecutionTimeoutError,
+            MalformedSelectorError,
+            ProfileInputError,
+            SelectorNotFoundError,
+            TargetInvocationError,
+        )
+        from localdev.profiling.loader import profile_target_in_worker
+
+        effective_target_path = target.path
+
+        w_runs = warmup_runs if warmup_runs is not None else DEFAULT_WARMUP_INVOCATIONS
+        m_runs = measured_runs if measured_runs is not None else DEFAULT_MEASURED_INVOCATIONS
+        t_limit = timeout if timeout is not None else DEFAULT_TIMEOUT_SECONDS
+
+        res = profile_target_in_worker(
+            target_path=effective_target_path,
+            selector=selector,
+            input_file=input_file,
+            warmup_runs=w_runs,
+            measured_runs=m_runs,
+            timeout=t_limit,
+            fail_on_job_failure=fail_on_job_failure,
+        )
+
+        if res.timed_out:
+            raise ExecutionTimeoutError(
+                f"Profiling timed out after {t_limit:.1f} seconds.",
+                timeout_seconds=t_limit,
+            )
+
+        if not res.success:
+            err_type = res.error_type or "TargetFailure"
+            err_msg = res.error_message or "Unknown error occurred during profiling."
+            if err_type == "ProfileInputError":
+                raise ProfileInputError(err_msg)
+            if err_type == "MalformedSelectorError":
+                raise MalformedSelectorError(err_msg)
+            if err_type == "SelectorNotFoundError":
+                raise SelectorNotFoundError(err_msg)
+            if err_type == "TargetInvocationError":
+                raise TargetInvocationError(err_msg)
+            raise TargetInvocationError(f"Profiling failed: {err_msg}")
+
+        target_display = f"{target.path}::{selector}"
+        return res.to_profile_report(target_display)
 
     def validate_candidate(
         self,

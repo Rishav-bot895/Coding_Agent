@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
 
 import pytest
 
@@ -354,11 +355,13 @@ def test_no_arguments_prints_help() -> None:
     assert "usage: localdev" in stderr.getvalue()
 
 
-def test_successful_main_dispatch() -> None:
-    """Valid invocation returns EXIT_SUCCESS and writes initialization line."""
+def test_successful_main_dispatch(tmp_path: Path) -> None:
+    """Valid invocation returns EXIT_SUCCESS and writes report."""
+    target_file = tmp_path / "script.py"
+    target_file.write_text("print('hello')\n", encoding="utf-8")
     stdout = io.StringIO()
     with redirect_stdout(stdout):
-        code = main(["profile", "script.py"])
+        code = main(["info", str(target_file)])
     assert code == EXIT_SUCCESS
-    assert "localdev profile: initialized for target 'script.py'." in stdout.getvalue()
+    assert "localdev INFO" in stdout.getvalue()
 
