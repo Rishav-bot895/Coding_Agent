@@ -7,7 +7,12 @@ syntax checks, AST fact extraction, execution preparation (-E -B -P), and valida
 from __future__ import annotations
 
 import sys
+from collections.abc import Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from localdev.patching.edit_schema import EditOperation
 
 from localdev.errors import LocaldevError
 from localdev.languages.base import LanguageAdapter
@@ -148,9 +153,11 @@ class PythonAdapter(LanguageAdapter):
         expected_stdout: str | None = None,
         expected_stdout_contains: str | None = None,
         expected_exit: int | None = None,
+        baseline_diagnostics: Sequence[DiagnosticRecord] | None = None,
+        edits: Sequence[EditOperation] | None = None,
+        targeted_diagnostics: Sequence[DiagnosticRecord | str] | None = None,
+        baseline_syntax_valid: bool = True,
     ) -> ValidationReport:
-        import ast
-
         cand_path = Path(candidate_path).resolve()
         try:
             cand_text = cand_path.read_text(encoding="utf-8", errors="replace")
@@ -164,17 +171,34 @@ class PythonAdapter(LanguageAdapter):
                 details={"error": f"Failed to read candidate: {exc}"},
             )
 
-        # Level A: Static validity (ast.parse)
-        try:
-            ast.parse(cand_text)
-        except SyntaxError as exc:
+        # Level A: Static validity (syntax check + isolated Ruff baseline diff)
+        from localdev.languages.python.diagnostics import evaluate_level_a
+
+        base_diags = (
+            baseline_diagnostics
+            if baseline_diagnostics is not None
+            else self.run_diagnostics(target)
+        )
+
+        level_a = evaluate_level_a(
+            candidate_source=cand_text,
+            baseline_diagnostics=base_diags,
+            edits=edits,
+            targeted_diagnostics=targeted_diagnostics,
+            baseline_syntax_valid=baseline_syntax_valid,
+        )
+
+        if not level_a.passed:
             return ValidationReport(
                 level_achieved=ValidationLevel.NONE,
                 static_valid=False,
                 failure_reproduction_removed=False,
                 clean_execution=False,
                 behavioral_oracle_passed=None,
-                details={"syntax_error": str(exc)},
+                details={
+                    "level_a": level_a.model_dump(),
+                    "failure_reasons": level_a.failure_reasons,
+                },
             )
 
         static_valid = True
@@ -182,7 +206,9 @@ class PythonAdapter(LanguageAdapter):
         failure_removed = False
         clean_exec = False
         oracle_passed: bool | None = None
-        details: dict[str, object] = {"static_validity": "clean_parse"}
+        details: dict[str, object] = {
+            "level_a": level_a.model_dump(),
+        }
 
         # Levels B, C, D: Subprocess execution of candidate
         if cand_path.is_file():

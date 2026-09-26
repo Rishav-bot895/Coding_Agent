@@ -40,6 +40,7 @@ from localdev.schemas import (
 
 if TYPE_CHECKING:
     from localdev.inference.base import BaseInferenceClient
+    from localdev.patching.edit_schema import EditOperation
 
 
 class Orchestrator:
@@ -351,6 +352,10 @@ class Orchestrator:
         expected_stdout: str | None = None,
         expected_stdout_contains: str | None = None,
         expected_exit: int | None = None,
+        baseline_diagnostics: Sequence[DiagnosticRecord] | None = None,
+        edits: Sequence[EditOperation] | None = None,
+        targeted_diagnostics: Sequence[DiagnosticRecord | str] | None = None,
+        baseline_syntax_valid: bool = True,
     ) -> ValidationReport:
         """Empirically evaluate a candidate patch across validation tiers (Levels A-D)."""
         adapter = self.resolve_adapter(target)
@@ -361,6 +366,10 @@ class Orchestrator:
             expected_stdout=expected_stdout,
             expected_stdout_contains=expected_stdout_contains,
             expected_exit=expected_exit,
+            baseline_diagnostics=baseline_diagnostics,
+            edits=edits,
+            targeted_diagnostics=targeted_diagnostics,
+            baseline_syntax_valid=baseline_syntax_valid,
         )
 
     def propose_fix(
@@ -632,6 +641,10 @@ class Orchestrator:
             expected_stdout=expected_stdout,
             expected_stdout_contains=expected_stdout_contains,
             expected_exit=expected_exit,
+            baseline_diagnostics=analysis_report.diagnostics if analysis_report else None,
+            edits=proposal.edits if proposal else None,
+            targeted_diagnostics=analysis_report.diagnostics if (analysis_report and analysis_report.diagnostics) else None,
+            baseline_syntax_valid=analysis_report.syntax_valid if analysis_report else True,
         )
 
         # Step 5: Propose-only review

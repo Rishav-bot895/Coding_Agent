@@ -1061,7 +1061,7 @@ python -m mypy --strict localdev
 
 ## P9-T1 — Implement structural and Ruff baseline comparison (Validation Level A — Static validity)
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Validate candidate syntax and compare normalized static diagnostics before and after applying the patch, certifying Validation Level A (Static validity) when syntax parses cleanly, no new diagnostics are introduced, and any targeted static finding is eliminated.
 

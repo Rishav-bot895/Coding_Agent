@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import codecs
 import hashlib
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
@@ -160,11 +161,112 @@ class PatchCandidate:
         p.write_bytes(self.patched_bytes)
         return p
 
+    def map_baseline_line(self, baseline_line: int) -> int | None:
+        """Map a 1-based baseline line number to candidate line coordinates.
+
+        Returns None if the baseline line was directly modified or deleted.
+        """
+        return map_baseline_line_to_candidate(baseline_line, self.proposal.edits)
+
+    def is_line_modified(self, candidate_line: int) -> bool:
+        """Check if a candidate line falls within an edited region."""
+        return is_candidate_line_modified(candidate_line, self.proposal.edits)
+
     def __repr__(self) -> str:
         return (
             f"PatchCandidate(target='{self.target_name}', lines={self.line_count}, "
             f"changed={self.changed_line_count}, sha256='{self.sha256[:8]}...')"
         )
+
+
+def compute_line_shift_before(line: int, edits: Sequence[EditOperation]) -> int:
+    """Compute the net line number shift for a baseline line caused by preceding edits.
+
+    Args:
+        line: 1-based baseline line number.
+        edits: Sequence of EditOperation items.
+
+    Returns:
+        Integer line delta (positive for net insertions, negative for net deletions).
+    """
+    shift = 0
+    for edit in sorted(edits, key=lambda e: (e.start_line, e.end_line)):
+        if edit.operation == EditOperationType.INSERT:
+            if line >= edit.start_line:
+                new_count = len(edit.replacement_text.splitlines()) if edit.replacement_text else 0
+                shift += new_count
+        else:
+            if line > edit.end_line:
+                old_count = edit.end_line - edit.start_line + 1
+                new_count = len(edit.replacement_text.splitlines()) if edit.replacement_text else 0
+                shift += (new_count - old_count)
+    return shift
+
+
+def map_baseline_line_to_candidate(
+    baseline_line: int,
+    edits: Sequence[EditOperation],
+) -> int | None:
+    """Map a 1-based baseline line number to its candidate line number.
+
+    Args:
+        baseline_line: 1-based line number in pre-patch baseline.
+        edits: Sequence of EditOperation items.
+
+    Returns:
+        1-based line number in candidate text, or None if the baseline line was
+        directly replaced or deleted by an edit.
+    """
+    if baseline_line < 1:
+        return None
+
+    for edit in edits:
+        if (
+            edit.operation in (EditOperationType.REPLACE, EditOperationType.DELETE)
+            and edit.start_line <= baseline_line <= edit.end_line
+        ):
+            return None
+
+    shift = compute_line_shift_before(baseline_line, edits)
+    return baseline_line + shift
+
+
+def is_candidate_line_modified(
+    candidate_line: int,
+    edits: Sequence[EditOperation],
+) -> bool:
+    """Determine if a 1-based candidate line number falls within an edited region.
+
+    Args:
+        candidate_line: 1-based line number in candidate text.
+        edits: Sequence of EditOperation items.
+
+    Returns:
+        True if candidate_line falls within text introduced or replaced by an edit.
+    """
+    if candidate_line < 1:
+        return False
+
+    sorted_edits = sorted(edits, key=lambda e: (e.start_line, e.end_line))
+    cumulative_shift = 0
+
+    for edit in sorted_edits:
+        new_count = len(edit.replacement_text.splitlines()) if edit.replacement_text else 0
+        old_count = (
+            (edit.end_line - edit.start_line + 1)
+            if edit.operation in (EditOperationType.REPLACE, EditOperationType.DELETE)
+            else 0
+        )
+
+        cand_start = edit.start_line + cumulative_shift
+        cand_end = cand_start + new_count - 1
+
+        if new_count > 0 and cand_start <= candidate_line <= cand_end:
+            return True
+
+        cumulative_shift += (new_count - old_count)
+
+    return False
 
 
 class PatchApplier:

@@ -229,6 +229,7 @@ class MockAdapter(LanguageAdapter):
         expected_stdout: str | None = None,
         expected_stdout_contains: str | None = None,
         expected_exit: int | None = None,
+        **kwargs: object,
     ) -> ValidationReport:
         self.calls.append(
             (

@@ -29,6 +29,9 @@ from localdev.schemas import (
 
 if TYPE_CHECKING:
     from localdev.agent.orchestrator import Orchestrator
+    from localdev.languages.python.diagnostics import LevelAResult
+    from localdev.patching.edit_schema import EditOperation
+    from localdev.schemas import DiagnosticRecord
 
 
 def _read_target_text(target: TargetRecord, source_text: str | None = None) -> str:
@@ -276,4 +279,41 @@ def collect_diagnosis_evidence(
         analysis=analysis,
         execution=execution,
     )
+
+
+def evaluate_candidate_level_a(
+    target: TargetRecord,
+    candidate_source: str,
+    baseline_analysis: AnalysisReport | None = None,
+    candidate_diagnostics: Sequence[DiagnosticRecord] | None = None,
+    edits: Sequence[EditOperation] | None = None,
+    targeted_diagnostics: Sequence[DiagnosticRecord | str] | None = None,
+) -> LevelAResult:
+    """Evaluate candidate patch against Validation Level A using baseline analysis evidence.
+
+    Args:
+        target: Validated target file metadata.
+        candidate_source: Reconstructed source code of the candidate.
+        baseline_analysis: Optional pre-collected AnalysisReport for baseline.
+        candidate_diagnostics: Optional pre-collected candidate diagnostics.
+        edits: Optional sequence of applied edit operations for line shift mapping.
+        targeted_diagnostics: Optional targeted findings expected to be eliminated.
+
+    Returns:
+        LevelAResult containing pass/fail status, syntax diagnostics, and diagnostic diff.
+    """
+    from localdev.languages.python.diagnostics import evaluate_level_a
+
+    baseline_diags = baseline_analysis.diagnostics if baseline_analysis else ()
+    baseline_syntax_valid = baseline_analysis.syntax_valid if baseline_analysis else True
+
+    return evaluate_level_a(
+        candidate_source=candidate_source,
+        baseline_diagnostics=baseline_diags,
+        candidate_diagnostics=candidate_diagnostics,
+        edits=edits,
+        targeted_diagnostics=targeted_diagnostics,
+        baseline_syntax_valid=baseline_syntax_valid,
+    )
+
 

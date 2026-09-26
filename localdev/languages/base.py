@@ -8,7 +8,12 @@ behind a strongly typed, schema-validated contract.
 from __future__ import annotations
 
 import abc
+from collections.abc import Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from localdev.patching.edit_schema import EditOperation
 
 from localdev.schemas import (
     ASTFacts,
@@ -116,6 +121,10 @@ class LanguageAdapter(abc.ABC):
         expected_stdout: str | None = None,
         expected_stdout_contains: str | None = None,
         expected_exit: int | None = None,
+        baseline_diagnostics: Sequence[DiagnosticRecord] | None = None,
+        edits: Sequence[EditOperation] | None = None,
+        targeted_diagnostics: Sequence[DiagnosticRecord | str] | None = None,
+        baseline_syntax_valid: bool = True,
     ) -> ValidationReport:
         """Empirically evaluate a candidate patch across validation tiers (Levels A-D)."""
         ...
