@@ -1264,7 +1264,7 @@ python -m mypy --strict localdev
 
 ## P11-T1 — Parse selectors and load targets via direct file loading in disposable worker
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Parse function selectors (`file.py::function_name`) and load the target module directly from its file path using `importlib.util.spec_from_file_location` inside a disposable worker subprocess, capturing import metrics and side effects separately.
 

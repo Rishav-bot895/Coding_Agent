@@ -11,9 +11,11 @@ Rejects malformed selectors and explicitly disallows nested functions in selecto
 
 from __future__ import annotations
 
+import inspect
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from localdev.errors import MalformedSelectorError, SelectorNotFoundError
 
@@ -114,15 +116,18 @@ def match_function_selector(
     else:
         parsed = selector
 
-    # Check if selector attempts to target a nested function inside a function
+    # Check if selector attempts to target a nested function inside a function or method
     if parsed.class_name is not None:
         top_level_func_names = {f.name for f in ast_facts.functions if not f.is_method}
-        first_segment = parsed.class_name.split(".")[0]
-        if first_segment in top_level_func_names:
-            raise MalformedSelectorError(
-                f"Malformed selector '{parsed.raw_selector}': nested functions are not supported in selectors. "
-                "Only top-level functions and class methods can be selected."
-            )
+        method_qual_names = {f.qualified_name for f in ast_facts.functions if f.is_method}
+        segments = parsed.class_name.split(".")
+        for i in range(1, len(segments) + 1):
+            prefix = ".".join(segments[:i])
+            if prefix in top_level_func_names or prefix in method_qual_names:
+                raise MalformedSelectorError(
+                    f"Malformed selector '{parsed.raw_selector}': nested functions are not supported in selectors. "
+                    "Only top-level functions and class methods can be selected."
+                )
 
     # If selector specifies a file path, verify it matches target_path
     if parsed.file_path is not None and target_path is not None:
@@ -189,3 +194,156 @@ def resolve_function_selector(
         f"Function selector '{sel_text}' not found in target. Available functions: {available}",
         available_selectors=available,
     )
+
+
+def resolve_selector_from_file(
+    target_path: Path | str,
+    selector: str | FunctionSelector,
+) -> ASTFunctionFact:
+    """Convenience helper to extract AST facts and resolve a selector directly from a file.
+
+    Args:
+        target_path: Path to Python source file.
+        selector: Function selector string or parsed FunctionSelector.
+
+    Returns:
+        The matched ASTFunctionFact.
+    """
+    from localdev.languages.python.ast_analyser import extract_ast_facts_from_source
+
+    path = Path(target_path).resolve()
+    source = path.read_text(encoding="utf-8", errors="replace")
+    facts = extract_ast_facts_from_source(source, filename=path.name)
+    return resolve_function_selector(selector, facts, target_path=str(path))
+
+
+def resolve_callable_from_module(
+    module: Any,
+    selector: str | FunctionSelector,
+    target_path: str | None = None,
+) -> tuple[Callable[..., Any], str, bool]:
+    """Resolve a callable function or class method directly from an imported Python module object.
+
+    Args:
+        module: Live Python module object.
+        selector: Function selector string or parsed FunctionSelector.
+        target_path: Optional target file path to verify against selector's file part.
+
+    Returns:
+        Tuple of (callable_object, qualified_name, is_method).
+
+    Raises:
+        MalformedSelectorError: If selector syntax is invalid, ambiguous, or targets a nested function.
+        SelectorNotFoundError: If the target function, class, or method cannot be found in the module.
+    """
+    if isinstance(selector, str):
+        parsed = parse_function_selector(selector)
+    else:
+        parsed = selector
+
+    # If selector specifies a file path, verify it matches target_path
+    if parsed.file_path is not None and target_path is not None:
+        sel_name = Path(parsed.file_path).name.lower()
+        tgt_name = Path(target_path).name.lower()
+        if sel_name != tgt_name:
+            raise SelectorNotFoundError(
+                f"Selector file '{parsed.file_path}' does not match target file '{Path(target_path).name}'."
+            )
+
+    # Check for nested function attempts
+    if parsed.class_name is not None:
+        segments = parsed.class_name.split(".")
+        curr_obj = module
+        for segment in segments:
+            if hasattr(curr_obj, segment):
+                sub = getattr(curr_obj, segment)
+                if inspect.isfunction(sub) or inspect.isroutine(sub):
+                    raise MalformedSelectorError(
+                        f"Malformed selector '{parsed.raw_selector}': nested functions are not supported in selectors. "
+                        "Only top-level functions and class methods can be selected."
+                    )
+                curr_obj = sub
+            else:
+                break
+
+    # Case 1: Simple function / method name without class qualifier
+    if parsed.class_name is None:
+        # Search top-level functions first
+        if hasattr(module, parsed.function_name):
+            cand = getattr(module, parsed.function_name)
+            if callable(cand) and not inspect.isclass(cand):
+                return cand, parsed.function_name, False
+
+        # Search methods in classes defined in this module
+        matching_methods: list[tuple[type, Any, str]] = []
+        for _, val in inspect.getmembers(module, inspect.isclass):
+            if getattr(val, "__module__", None) in (module.__name__, None) and hasattr(val, parsed.function_name):
+                m = getattr(val, parsed.function_name)
+                if callable(m):
+                    matching_methods.append((val, m, f"{val.__name__}.{parsed.function_name}"))
+
+        if len(matching_methods) == 1:
+            _cls, method, qualname = matching_methods[0]
+            return method, qualname, True
+        if len(matching_methods) > 1:
+            candidates = [q for _, _, q in matching_methods]
+            raise MalformedSelectorError(
+                f"Ambiguous selector '{parsed.function_name}' matches multiple methods: {candidates}. "
+                f"Please qualify with ClassName.{parsed.function_name}."
+            )
+
+        # Collect available callables for error message
+        available: list[str] = [
+            k
+            for k, v in module.__dict__.items()
+            if callable(v) and not inspect.isclass(v) and not k.startswith("_")
+        ]
+        for _, val in inspect.getmembers(module, inspect.isclass):
+            if getattr(val, "__module__", None) in (module.__name__, None):
+                for mk, mv in val.__dict__.items():
+                    if callable(mv) and not mk.startswith("_"):
+                        available.append(f"{val.__name__}.{mk}")
+
+        raise SelectorNotFoundError(
+            f"Function selector '{parsed.raw_selector}' not found in target module. Available functions: {available}",
+            available_selectors=available,
+        )
+
+    # Case 2: Class-qualified method
+    segments = parsed.class_name.split(".")
+    curr_target = module
+    for segment in segments:
+        if not hasattr(curr_target, segment):
+            raise SelectorNotFoundError(
+                f"Class or container '{segment}' in selector '{parsed.raw_selector}' not found in target module."
+            )
+        curr_target = getattr(curr_target, segment)
+        if inspect.isfunction(curr_target) or inspect.isroutine(curr_target):
+            raise MalformedSelectorError(
+                f"Malformed selector '{parsed.raw_selector}': nested functions are not supported in selectors. "
+                "Only top-level functions and class methods can be selected."
+            )
+
+    if not inspect.isclass(curr_target):
+        raise SelectorNotFoundError(
+            f"Target container '{parsed.class_name}' in selector '{parsed.raw_selector}' is not a class."
+        )
+
+    if not hasattr(curr_target, parsed.function_name):
+        available_methods = [
+            k for k, v in curr_target.__dict__.items() if callable(v) and not k.startswith("_")
+        ]
+        raise SelectorNotFoundError(
+            f"Method '{parsed.function_name}' not found on class '{curr_target.__name__}'. "
+            f"Available methods: {available_methods}",
+            available_selectors=[f"{curr_target.__name__}.{m}" for m in available_methods],
+        )
+
+    method_obj = getattr(curr_target, parsed.function_name)
+    if not callable(method_obj):
+        raise SelectorNotFoundError(
+            f"Attribute '{parsed.function_name}' on class '{curr_target.__name__}' is not callable."
+        )
+
+    return method_obj, f"{parsed.class_name}.{parsed.function_name}", True
+
