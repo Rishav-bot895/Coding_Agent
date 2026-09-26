@@ -12,7 +12,12 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Sequence
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from localdev.patching.edit_schema import EditOperation
 
 from localdev.reporting.sanitizer import strip_ansi
 from localdev.schemas import ErrorSignature, TracebackFrame
@@ -211,3 +216,44 @@ def parse_traceback(
     )
 
     return frames, signature
+
+
+def is_same_error_signature(
+    sig_a: ErrorSignature | None,
+    sig_b: ErrorSignature | None,
+    *,
+    edits: Sequence[EditOperation] | None = None,
+) -> bool:
+    """Determine if candidate error signature reproduces the baseline error signature.
+
+    Compares:
+    - Exception type (e.g. ZeroDivisionError == ZeroDivisionError)
+    - Normalized exception message (e.g. division by zero)
+    - Top target file (by filename)
+
+    Args:
+        sig_a: ErrorSignature from pre-patch baseline run.
+        sig_b: ErrorSignature from post-patch candidate run.
+        edits: Optional applied edits sequence to map shifted line numbers.
+
+    Returns:
+        True if candidate error signature reproduces the baseline failure, False otherwise.
+    """
+    if sig_a is None and sig_b is None:
+        return True
+    if sig_a is None or sig_b is None:
+        return False
+
+    if sig_a.exception_type != sig_b.exception_type:
+        return False
+
+    if sig_a.normalized_message != sig_b.normalized_message:
+        return False
+
+    # Check target file basename if both are present
+    return not (
+        sig_a.top_target_file
+        and sig_b.top_target_file
+        and Path(sig_a.top_target_file).name != Path(sig_b.top_target_file).name
+    )
+

@@ -528,6 +528,14 @@ class ValidationReport(BaseModel):
         default=None,
         description="Level D: User-supplied behavioral assertions (--expected-stdout/exit) satisfied.",
     )
+    baseline_error_signature: ErrorSignature | None = Field(
+        default=None,
+        description="Baseline runtime error signature if baseline execution failed.",
+    )
+    candidate_error_signature: ErrorSignature | None = Field(
+        default=None,
+        description="Candidate runtime error signature if candidate execution failed.",
+    )
     details: dict[str, Any] = Field(
         default_factory=dict, description="Detailed diagnostic metrics and check results."
     )
@@ -606,6 +614,12 @@ class ComplexityReport(BaseModel):
         default=None, description="Abstention code if complexity is UNKNOWN."
     )
     details: str = Field(default="", description="Human-readable explanation of derivations.")
+    start_line: int | None = Field(
+        default=None, description="1-based inclusive start line number of target function."
+    )
+    end_line: int | None = Field(
+        default=None, description="1-based inclusive end line number of target function."
+    )
 
 
 # =============================================================================

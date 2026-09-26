@@ -1089,7 +1089,7 @@ python -m mypy --strict localdev
 
 ## P9-T2 — Compare runtime failure signatures on candidate (Validation Levels B and C)
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Execute the temporary candidate copy under identical inputs, environment, and limits as the baseline run, certifying Validation Level B (Failure reproduction removed) when the original runtime exception no longer occurs, or Validation Level C (Clean execution) when execution exits with code 0.
 
@@ -1115,7 +1115,7 @@ python -m mypy --strict localdev
 
 ## P9-T3 — Add explicit behavioural checks (Validation Level D — Behavioral oracle)
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Support user-supplied behavioural assertions (`--expected-stdout` exact or substring, `--expected-exit`) and certify Validation Level D (Behavioral oracle) only when the candidate satisfies the explicit oracle.
 
@@ -1144,7 +1144,7 @@ python -m mypy --strict localdev
 
 ## P10-T1 — Define the restricted cost model, space semantics, and abstention contract
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Establish a formal, restricted static cost model and typed schemas for time, auxiliary space, and output space based on supported CPython runtime semantics, enforcing a strict `conservative + assumption-linked + source-linked + abstention-first` contract.
 
@@ -1185,7 +1185,7 @@ python -m mypy --strict localdev
 
 ## P10-T2 — Analyse loops, nesting, built-ins, and space allocation
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Traverse Python AST facts to evaluate iterative algorithms, combining loop nesting, recognizing common built-in operations, and formally separating auxiliary space from output space.
 
@@ -1213,7 +1213,7 @@ python -m mypy --strict localdev
 
 ## P10-T3 — Add bounded recursion analysis and abstention
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Recognize simple, bounded direct recursion patterns (linear decrement, binary divide-and-conquer), account for call-stack depth in auxiliary space, emit `O(2^n)` for binary branching recursion, and abstain on unsupported or dynamic recursive patterns.
 
@@ -1237,7 +1237,7 @@ python -m mypy --strict localdev
 
 ## P10-T4 — Deliver the `complexity` command
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Connect AST analysis, cost models, and selector parsing to deliver the `complexity` command, providing file summaries or targeted function-level complexity with source lines, assumptions, and JSON output.
 

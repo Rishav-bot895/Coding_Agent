@@ -112,6 +112,15 @@ class LanguageAdapter(abc.ABC):
         """Perform static algorithmic complexity analysis without executing code."""
         ...
 
+    def analyze_file_complexity(
+        self,
+        target: TargetRecord,
+        source_text: str | None = None,
+    ) -> list[ComplexityReport]:
+        """Perform static algorithmic complexity analysis for all functions/methods in target."""
+        report = self.analyze_complexity(target, source_text=source_text, selector=None)
+        return [report]
+
     @abc.abstractmethod
     def validate_candidate(
         self,
@@ -125,6 +134,10 @@ class LanguageAdapter(abc.ABC):
         edits: Sequence[EditOperation] | None = None,
         targeted_diagnostics: Sequence[DiagnosticRecord | str] | None = None,
         baseline_syntax_valid: bool = True,
+        target_args: Sequence[str] | None = None,
+        stdin_file: str | Path | None = None,
+        timeout: float | None = None,
+        fail_on_job_failure: bool = False,
     ) -> ValidationReport:
         """Empirically evaluate a candidate patch across validation tiers (Levels A-D)."""
         ...

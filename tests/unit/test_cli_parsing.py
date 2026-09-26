@@ -277,11 +277,21 @@ def test_secondary_flags_parsing() -> None:
     p_prof = parse_cli_args(["profile", "target.py::fn", "--input", "inputs.json"])
     assert p_prof.input_file == "inputs.json"
 
-    # fix --expected-stdout and --expected-exit
+    # fix --expected-stdout, --expected-stdout-contains, and --expected-exit
     p_fix = parse_cli_args(
-        ["fix", "target.py", "--expected-stdout", "result: 42\n", "--expected-exit", "0"]
+        [
+            "fix",
+            "target.py",
+            "--expected-stdout",
+            "result: 42\n",
+            "--expected-stdout-contains",
+            "42",
+            "--expected-exit",
+            "0",
+        ]
     )
     assert p_fix.expected_stdout == "result: 42\n"
+    assert p_fix.expected_stdout_contains == "42"
     assert p_fix.expected_exit == 0
 
     # debug --stdin-file
@@ -348,7 +358,7 @@ def test_successful_main_dispatch() -> None:
     """Valid invocation returns EXIT_SUCCESS and writes initialization line."""
     stdout = io.StringIO()
     with redirect_stdout(stdout):
-        code = main(["complexity", "script.py"])
+        code = main(["profile", "script.py"])
     assert code == EXIT_SUCCESS
-    assert "localdev complexity: initialized for target 'script.py'." in stdout.getvalue()
+    assert "localdev profile: initialized for target 'script.py'." in stdout.getvalue()
 

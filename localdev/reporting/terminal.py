@@ -10,11 +10,12 @@ fallback for Windows consoles.
 from __future__ import annotations
 
 import sys
-from typing import TextIO
+from typing import Any, TextIO
 
 from localdev.reporting.sanitizer import safe_terminal_encode, sanitize_terminal_text
 from localdev.schemas import (
     AnalysisReport,
+    ComplexityReport,
     DetectionResult,
     DiagnosisAbstention,
     DiagnosisRecord,
@@ -303,7 +304,7 @@ class TerminalReporter:
                 "clean_execution": val.clean_execution,
                 "behavioral_oracle_passed": val.behavioral_oracle_passed,
             }
-            parts.append(self.render_validation_levels(val.level_achieved, checks))
+            parts.append(self.render_validation_levels(val.level_achieved, checks, details=val.details))
 
         # 4. Patch Application / Review Status
         status_lines: list[str] = ["--- Patch Application Status ---"]
@@ -400,6 +401,7 @@ class TerminalReporter:
         self,
         level_achieved: ValidationLevel | str,
         checks: dict[str, bool | None],
+        details: dict[str, Any] | None = None,
     ) -> str:
         """Render empirical validation tier assessment (Levels A–D)."""
         level_str = level_achieved.value if isinstance(level_achieved, ValidationLevel) else str(level_achieved)
@@ -427,6 +429,9 @@ class TerminalReporter:
         if level_str in ("B", "Level B"):
             lines.append("  Note: Level B confirms failure signature removal, but does NOT prove correctness.")
 
+        if level_str in ("D", "Level D"):
+            lines.append("  Note: Level D confirms empirical satisfaction of explicit behavioral oracle.")
+
         lines.append("")
         return "\n".join(lines)
 
@@ -440,10 +445,19 @@ class TerminalReporter:
         assumptions: list[str],
         details: str = "",
         abstention_reason: str | None = None,
+        start_line: int | None = None,
+        end_line: int | None = None,
     ) -> str:
         """Render asymptotic complexity bounds and CPython runtime contract assumptions."""
+        header = f"--- Complexity Analysis: {target} ---"
+        if start_line is not None:
+            if end_line is not None and end_line != start_line:
+                header = f"--- Complexity Analysis: {target} (lines {start_line}-{end_line}) ---"
+            else:
+                header = f"--- Complexity Analysis: {target} (line {start_line}) ---"
+
         lines = [
-            f"--- Complexity Analysis: {target} ---",
+            header,
             f"  Time Complexity:       {time_comp}",
             f"  Auxiliary Space:       {aux_space} (transient stack/heap buffers)",
             f"  Output Space:          {output_space} (escaping return structures)",
@@ -463,6 +477,36 @@ class TerminalReporter:
 
         lines.append("")
         return "\n".join(lines)
+
+    def render_complexity(
+        self,
+        reports: list[ComplexityReport] | ComplexityReport,
+        target_path: str,
+    ) -> str:
+        """Render terminal summary for complexity analysis."""
+        report_list = [reports] if isinstance(reports, ComplexityReport) else reports
+        all_success = all(r.abstention_reason is None for r in report_list)
+        status_tag = "SUCCESS" if all_success else "ABSTAINED"
+        lines = [
+            f"=== localdev COMPLEXITY [{status_tag}] ===",
+            f"Target: {target_path}",
+            "",
+        ]
+        for r in report_list:
+            comp_block = self.render_complexity_report(
+                target=r.target,
+                time_comp=r.time_complexity.value,
+                aux_space=r.auxiliary_space.value,
+                output_space=r.output_space.value,
+                confidence=r.confidence.value,
+                assumptions=r.assumptions,
+                details=r.details,
+                abstention_reason=r.abstention_reason.value if r.abstention_reason else None,
+                start_line=r.start_line,
+                end_line=r.end_line,
+            )
+            lines.append(comp_block)
+        return "\n".join(lines).strip() + "\n"
 
     def render_profile_report(
         self,

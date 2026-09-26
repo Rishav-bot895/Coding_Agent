@@ -344,6 +344,15 @@ class Orchestrator:
         adapter = self.resolve_adapter(target, source_text=source_text)
         return adapter.analyze_complexity(target, source_text=source_text, selector=selector)
 
+    def analyze_file_complexity(
+        self,
+        target: TargetRecord,
+        source_text: str | None = None,
+    ) -> list[ComplexityReport]:
+        """Perform static algorithmic complexity analysis for all functions/methods in target."""
+        adapter = self.resolve_adapter(target, source_text=source_text)
+        return adapter.analyze_file_complexity(target, source_text=source_text)
+
     def validate_candidate(
         self,
         target: TargetRecord,
@@ -356,6 +365,10 @@ class Orchestrator:
         edits: Sequence[EditOperation] | None = None,
         targeted_diagnostics: Sequence[DiagnosticRecord | str] | None = None,
         baseline_syntax_valid: bool = True,
+        target_args: Sequence[str] | None = None,
+        stdin_file: str | Path | None = None,
+        timeout: float | None = None,
+        fail_on_job_failure: bool = False,
     ) -> ValidationReport:
         """Empirically evaluate a candidate patch across validation tiers (Levels A-D)."""
         adapter = self.resolve_adapter(target)
@@ -370,6 +383,10 @@ class Orchestrator:
             edits=edits,
             targeted_diagnostics=targeted_diagnostics,
             baseline_syntax_valid=baseline_syntax_valid,
+            target_args=target_args,
+            stdin_file=stdin_file,
+            timeout=timeout,
+            fail_on_job_failure=fail_on_job_failure,
         )
 
     def propose_fix(
@@ -560,10 +577,23 @@ class Orchestrator:
         if has_oracle_request and execution_result is not None:
             if expected_exit is not None and execution_result.exit_code != expected_exit:
                 oracle_mismatch = True
-            if expected_stdout is not None and execution_result.stdout.strip() != expected_stdout.strip():
-                oracle_mismatch = True
-            if expected_stdout_contains is not None and expected_stdout_contains not in execution_result.stdout:
-                oracle_mismatch = True
+            if expected_stdout is not None:
+                norm_act = execution_result.stdout.replace("\r\n", "\n")
+                norm_exp = expected_stdout.replace("\r\n", "\n")
+                if (
+                    execution_result.stdout != expected_stdout
+                    and norm_act != norm_exp
+                    and execution_result.stdout.strip() != expected_stdout.strip()
+                ):
+                    oracle_mismatch = True
+            if expected_stdout_contains is not None:
+                norm_act = execution_result.stdout.replace("\r\n", "\n")
+                norm_sub = expected_stdout_contains.replace("\r\n", "\n")
+                if (
+                    expected_stdout_contains not in execution_result.stdout
+                    and norm_sub not in norm_act
+                ):
+                    oracle_mismatch = True
 
         if not (has_syntax_error or has_static_findings or has_runtime_error or oracle_mismatch):
             return FixReport(
@@ -645,6 +675,10 @@ class Orchestrator:
             edits=proposal.edits if proposal else None,
             targeted_diagnostics=analysis_report.diagnostics if (analysis_report and analysis_report.diagnostics) else None,
             baseline_syntax_valid=analysis_report.syntax_valid if analysis_report else True,
+            target_args=target_args,
+            stdin_file=stdin_file,
+            timeout=timeout,
+            fail_on_job_failure=fail_on_job_failure,
         )
 
         # Step 5: Propose-only review

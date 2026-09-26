@@ -35,6 +35,8 @@ from localdev.reporting.json_reporter import write_json_envelope
 from localdev.reporting.terminal import TerminalReporter
 from localdev.schemas import (
     AnalysisReport,
+    ComplexityAbstentionReason,
+    ComplexityReport,
     DetectionResult,
     DiagnosisAbstention,
     ExecutionResult,
@@ -66,6 +68,7 @@ class ParsedCliCommand:
     json_output: bool = False
     apply: bool = False
     expected_stdout: str | None = None
+    expected_stdout_contains: str | None = None
     expected_exit: int | None = None
     stdin_file: str | None = None
     target_args: list[str] = field(default_factory=list)
@@ -328,9 +331,27 @@ def create_parser() -> LocaldevArgumentParser:
         help="Expected stdout string for Level D behavioral validation.",
     )
     p_fix.add_argument(
+        "--expected-stdout-contains",
+        help="Substring that must be present in stdout for Level D behavioral validation.",
+    )
+    p_fix.add_argument(
         "--expected-exit",
         type=int,
         help="Expected exit code for Level D behavioral validation.",
+    )
+    p_fix.add_argument(
+        "--stdin-file",
+        help="Path to file supplying stdin for execution.",
+    )
+    p_fix.add_argument(
+        "--timeout",
+        type=float,
+        help="Maximum execution duration in seconds before termination.",
+    )
+    p_fix.add_argument(
+        "--fail-on-job-failure",
+        action="store_true",
+        help="Abort execution with non-zero exit code if Windows Job Object creation or assignment fails.",
     )
     p_fix.add_argument(
         "--propose-only",
@@ -448,6 +469,7 @@ def parse_cli_args(argv: Sequence[str]) -> ParsedCliCommand:
         json_output=json_flag,
         apply=apply_flag,
         expected_stdout=getattr(args, "expected_stdout", None),
+        expected_stdout_contains=getattr(args, "expected_stdout_contains", None),
         expected_exit=getattr(args, "expected_exit", None),
         stdin_file=getattr(args, "stdin_file", None),
         target_args=after_sep,
@@ -479,7 +501,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         is_json = parsed.json_output
 
         # For commands not yet wired, preserve the stub initialization line
-        if parsed.command not in ("info", "detect", "analyse", "debug", "fix"):
+        if parsed.command not in ("info", "detect", "analyse", "debug", "fix", "complexity"):
             sys.stdout.write(
                 f"localdev {parsed.command}: initialized for target '{parsed.target_file}'.\n"
             )
@@ -600,6 +622,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     apply=parsed.apply,
                     propose_only=parsed.propose_only,
                     expected_stdout=parsed.expected_stdout,
+                    expected_stdout_contains=parsed.expected_stdout_contains,
                     expected_exit=parsed.expected_exit,
                     target_args=parsed.target_args,
                     stdin_file=parsed.stdin_file,
@@ -639,6 +662,61 @@ def main(argv: Sequence[str] | None = None) -> int:
                 ):
                     return EXIT_SUCCESS
                 return EXIT_TARGET_FAILURE
+
+            if parsed.command == "complexity":
+                if parsed.selector:
+                    report = orchestrator.analyze_complexity(
+                        target=target_record,
+                        selector=parsed.selector,
+                    )
+                    reports = [report]
+                else:
+                    reports = orchestrator.analyze_file_complexity(target=target_record)
+
+                all_established = all(r.abstention_reason is None for r in reports)
+                has_syntax_error = any(
+                    r.abstention_reason == ComplexityAbstentionReason.UNSUPPORTED_SYNTAX
+                    for r in reports
+                )
+
+                if parsed.json_output:
+                    limitations = [
+                        f"{r.target}: {r.details}"
+                        for r in reports
+                        if r.abstention_reason is not None
+                    ]
+                    json_data: ComplexityReport | list[ComplexityReport] = (
+                        reports[0] if parsed.selector else reports
+                    )
+                    comp_envelope = JsonEnvelope[ComplexityReport | list[ComplexityReport]](
+                        command="complexity",
+                        success=all_established,
+                        target_path=target_record.path
+                        if not parsed.selector
+                        else f"{target_record.path}::{parsed.selector}",
+                        data=json_data,
+                        errors=[
+                            r.details
+                            for r in reports
+                            if r.abstention_reason == ComplexityAbstentionReason.UNSUPPORTED_SYNTAX
+                        ],
+                        limitations=limitations,
+                    )
+                    write_json_envelope(comp_envelope, sys.stdout)
+                else:
+                    reporter = TerminalReporter(sys.stdout)
+                    disp_target = (
+                        f"{target_record.path}::{parsed.selector}"
+                        if parsed.selector
+                        else target_record.path
+                    )
+                    reporter.write(reporter.render_complexity(reports, disp_target))
+
+                if has_syntax_error:
+                    return EXIT_TARGET_FAILURE
+                if not all_established:
+                    return EXIT_ABSTENTION
+                return EXIT_SUCCESS
 
         return EXIT_SUCCESS
 
