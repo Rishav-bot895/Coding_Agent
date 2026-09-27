@@ -127,16 +127,16 @@
       "id": "bug_runtime_stderr_flood",
       "path": "runtime/stderr_flood.py",
       "category": "runtime_fault",
-      "expected_status": "clean_success",
-      "error_type": null,
+      "expected_status": "output_overflow",
+      "error_type": "OutputOverflow",
       "description": "Emitting high-volume stderr stream exceeding buffer thresholds"
     },
     {
       "id": "bug_runtime_stdout_flood",
       "path": "runtime/stdout_flood.py",
       "category": "runtime_fault",
-      "expected_status": "clean_success",
-      "error_type": null,
+      "expected_status": "output_overflow",
+      "error_type": "OutputOverflow",
       "description": "Emitting high-volume stdout stream exceeding buffer thresholds"
     },
     {

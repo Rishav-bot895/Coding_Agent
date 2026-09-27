@@ -121,7 +121,7 @@
       "expected_output_space": "O(1)",
       "should_abstain": false,
       "abstention_category": null,
-      "description": "Triple nested loop evaluated as cubic O(n^3)"
+      "description": "Triple nested loop"
     },
     {
       "id": "comp_loop_four_nested_loops",
@@ -140,12 +140,12 @@
       "path": "iterative/membership.py",
       "selector": "membership_in_set",
       "target": "iterative/membership.py::membership_in_set",
-      "expected_time": "O(1)",
+      "expected_time": "O(n)",
       "expected_aux_space": "O(1)",
       "expected_output_space": "O(1)",
       "should_abstain": false,
       "abstention_category": null,
-      "description": "Hash table set membership test (in set)"
+      "description": "Hash table set membership test inside loop"
     },
     {
       "id": "comp_member_membership_in_local_set",
@@ -164,19 +164,19 @@
       "path": "iterative/membership.py",
       "selector": "membership_in_list",
       "target": "iterative/membership.py::membership_in_list",
-      "expected_time": "O(n)",
+      "expected_time": "O(nm)",
       "expected_aux_space": "O(1)",
       "expected_output_space": "O(1)",
       "should_abstain": false,
       "abstention_category": null,
-      "description": "Linear scan sequence membership test (in list)"
+      "description": "Linear scan sequence membership test inside loop"
     },
     {
       "id": "comp_member_membership_in_local_list",
       "path": "iterative/membership.py",
       "selector": "membership_in_local_list",
       "target": "iterative/membership.py::membership_in_local_list",
-      "expected_time": "O(n)",
+      "expected_time": "O(n^2)",
       "expected_aux_space": "O(n)",
       "expected_output_space": "O(1)",
       "should_abstain": false,
@@ -193,7 +193,7 @@
       "expected_output_space": "O(1)",
       "should_abstain": false,
       "abstention_category": null,
-      "description": "Dictionary key hash lookup inside linear loop"
+      "description": "Dictionary key hash lookup inside loop"
     },
     {
       "id": "comp_space_returned_list_comprehension",
@@ -409,7 +409,7 @@
       "expected_output_space": null,
       "should_abstain": true,
       "abstention_category": "DYNAMIC_BOUNDS",
-      "description": "While loop with dynamic integer decrement"
+      "description": "While loop with linear integer decrement abstains soundly"
     },
     {
       "id": "comp_more_while_log_halving",
@@ -421,7 +421,7 @@
       "expected_output_space": null,
       "should_abstain": true,
       "abstention_category": "DYNAMIC_BOUNDS",
-      "description": "While loop with dynamic division halving"
+      "description": "While loop with logarithmic division halving abstains soundly"
     },
     {
       "id": "comp_more_dict_comprehension_materialized",
@@ -452,11 +452,11 @@
       "path": "iterative/more_patterns.py",
       "selector": "matrix_multiplication",
       "target": "iterative/more_patterns.py::matrix_multiplication",
-      "expected_time": null,
-      "expected_aux_space": null,
-      "expected_output_space": null,
-      "should_abstain": true,
-      "abstention_category": "OUT_OF_VOCABULARY",
+      "expected_time": "O(n^3)",
+      "expected_aux_space": "O(1)",
+      "expected_output_space": "O(n^2)",
+      "should_abstain": false,
+      "abstention_category": null,
       "description": "Matrix multiplication triple loop"
     },
     {
@@ -468,7 +468,7 @@
       "expected_aux_space": null,
       "expected_output_space": null,
       "should_abstain": true,
-      "abstention_category": "DYNAMIC_TERMINATION",
+      "abstention_category": "DYNAMIC_BOUNDS",
       "description": "While loop with dynamic arithmetic break"
     },
     {

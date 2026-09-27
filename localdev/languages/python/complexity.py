@@ -589,7 +589,11 @@ class CostModelAnalyzer:
         for sub in ast.walk(tree):
             if (
                 isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef))
-                and sub.lineno == fact.start_line
+                and sub.name == fact.name
+                and (
+                    sub.lineno == fact.start_line
+                    or (fact.start_line <= sub.lineno <= fact.end_line)
+                )
             ):
                 return sub, fact.qualified_name
         return None, fact.qualified_name

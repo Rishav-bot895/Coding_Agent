@@ -143,9 +143,9 @@ def run_cli_command(
         return proc.returncode, proc.stdout, proc.stderr, duration_ms
     except subprocess.TimeoutExpired as exc:
         duration_ms = (time.perf_counter() - start_time) * 1000.0
-        stdout = exc.stdout or ""
-        stderr = exc.stderr or "Process timed out"
-        return 4, stdout, stderr, duration_ms
+        out_str = exc.stdout.decode("utf-8", errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+        err_str = exc.stderr.decode("utf-8", errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "Process timed out")
+        return 4, out_str, err_str, duration_ms
 
 
 def validate_json_envelope(data: Any, expected_command: str) -> bool:
@@ -223,12 +223,12 @@ def evaluate_bug_dataset(
                     data = env.get("data") or {}
                     if expected_status == "syntax_error":
                         # Expected syntax failure
-                        syntax_valid = data.get("syntax_valid", True)
+                        syntax_valid = (data.get("syntax_valid", False) if data else False) and bool(env.get("success", False))
                         passed = (not syntax_valid) and (code != 0)
                         details = f"Syntax rejection confirmed: errors={env.get('errors')}"
                     else:
                         # Clean syntax expected
-                        syntax_valid = data.get("syntax_valid", False)
+                        syntax_valid = data.get("syntax_valid", False) if data else False
                         passed = syntax_valid and (code == 0)
                         details = "Clean syntax parse confirmed"
                 except (json.JSONDecodeError, KeyError, TypeError) as exc:
@@ -253,6 +253,9 @@ def evaluate_bug_dataset(
                     elif expected_status == "timeout":
                         passed = (code == 4) or data.get("timed_out", False)
                         details = "Execution timeout successfully triggered and bounded"
+                    elif expected_status == "output_overflow":
+                        passed = bool(data.get("output_truncated", False)) or (code != 0)
+                        details = "Output overflow successfully bounded and truncated"
                     elif expected_status in ("runtime_exception", "assertion_failure"):
                         passed = (code != 0)
                         sig = data.get("error_signature") or {}

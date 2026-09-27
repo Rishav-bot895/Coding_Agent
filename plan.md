@@ -1396,7 +1396,7 @@ python -m mypy --strict localdev
 
 ## P12-T2 — Measure quality, safety, performance, and resource budgets
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Execute the complete evaluation harness on native Windows 11 x64 on the target 8 GB laptop, recording accuracy, false positive rates, abstention rates, patch safety, memory usage, and execution latency.
 
@@ -1421,7 +1421,7 @@ python -m mypy --strict localdev
 
 ## P12-T3 — Optimize within the 8 GB laptop budget
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Optimize prompt construction, memory lifecycle, process scheduling, and output limits based on evaluation findings to ensure responsive, stable operation on an 8 GB Windows laptop.
 

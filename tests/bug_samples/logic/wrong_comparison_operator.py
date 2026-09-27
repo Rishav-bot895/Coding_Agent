@@ -7,9 +7,9 @@ def check_threshold(computed_val: int, expected: int) -> bool:
 
 
 def main() -> None:
-    # Large integers created via computation are distinct objects in memory
-    val = 1000 + 42
-    target = 1042
+    # Large integers created dynamically at runtime are distinct objects in memory
+    val = int("1042")
+    target = int("1042")
     assert check_threshold(val, target) is True, "Calculated value should match target threshold"
 
 

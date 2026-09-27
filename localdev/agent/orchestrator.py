@@ -275,6 +275,7 @@ class Orchestrator:
         source_text: str | None = None,
         diagnose: bool = False,
         inference_client: BaseInferenceClient | None = None,
+        model: str | None = None,
     ) -> AnalysisReport:
         """Run the deterministic analyse workflow for a target file."""
         from localdev.agent.evidence import collect_analysis_evidence
@@ -287,6 +288,7 @@ class Orchestrator:
                 execution_result=None,
                 source_text=source_text,
                 inference_client=inference_client,
+                model=model,
             )
             report.diagnosis = diag
             report.inference_metadata = meta
@@ -301,6 +303,7 @@ class Orchestrator:
         fail_on_job_failure: bool = False,
         diagnose: bool = False,
         inference_client: BaseInferenceClient | None = None,
+        model: str | None = None,
     ) -> ExecutionResult:
         """Run the deterministic debug execution and traceback evidence workflow."""
         from localdev.agent.evidence import collect_debug_evidence
@@ -320,6 +323,7 @@ class Orchestrator:
                 analysis_report=analysis_report,
                 execution_result=exec_result,
                 inference_client=inference_client,
+                model=model,
             )
             exec_result.diagnosis = diag
             exec_result.inference_metadata = meta
@@ -364,6 +368,8 @@ class Orchestrator:
         measured_runs: int | None = None,
         timeout: float | None = None,
         fail_on_job_failure: bool = False,
+        unload_inference_model: bool = True,
+        inference_client: BaseInferenceClient | None = None,
     ) -> ProfileReport:
         """Profile a target function or method under hot-process semantics.
 
@@ -379,6 +385,8 @@ class Orchestrator:
             measured_runs: Optional measured run count override.
             timeout: Subprocess timeout in seconds.
             fail_on_job_failure: Strict failure flag for Job Object.
+            unload_inference_model: Whether to signal Ollama model unload before profiling.
+            inference_client: Optional inference client instance for model unloading.
 
         Returns:
             Validated ProfileReport separating import, latency, heap, and RSS.
@@ -409,6 +417,20 @@ class Orchestrator:
         w_runs = warmup_runs if warmup_runs is not None else DEFAULT_WARMUP_INVOCATIONS
         m_runs = measured_runs if measured_runs is not None else DEFAULT_MEASURED_INVOCATIONS
         t_limit = timeout if timeout is not None else DEFAULT_TIMEOUT_SECONDS
+
+        if unload_inference_model:
+            try:
+                if inference_client is not None:
+                    if inference_client.is_available():
+                        inference_client.unload_model()
+                else:
+                    from localdev.inference.ollama_client import OllamaClient
+
+                    with OllamaClient() as client:
+                        if client.is_available():
+                            client.unload_model()
+            except (InferenceError, OSError, RuntimeError):
+                pass
 
         res = profile_target_in_worker(
             target_path=effective_target_path,

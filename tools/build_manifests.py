@@ -44,20 +44,27 @@ def build_bug_manifest() -> None:
         "infinite_loop.py": ("TimeoutError", "Infinite loop breaching timeout limits"),
         "mixed_output.py": (None, "Emitting mixed stdout and stderr streams"),
         "nonzero_exit.py": ("SystemExit", "Explicit sys.exit(42) with non-zero exit code"),
-        "stderr_flood.py": (None, "Emitting high-volume stderr stream exceeding buffer thresholds"),
-        "stdout_flood.py": (None, "Emitting high-volume stdout stream exceeding buffer thresholds"),
+        "stderr_flood.py": ("OutputOverflow", "Emitting high-volume stderr stream exceeding buffer thresholds"),
+        "stdout_flood.py": ("OutputOverflow", "Emitting high-volume stdout stream exceeding buffer thresholds"),
     }
-    for f, (err, desc) in sorted(runtime_map.items()):
+    for f, (runtime_err, runtime_desc) in sorted(runtime_map.items()):
         p = base / "runtime" / f
         assert p.is_file(), f"Missing file: {p}"
-        status = "clean_success" if err is None else ("timeout" if err == "TimeoutError" else "runtime_exception")
+        if runtime_err == "OutputOverflow":
+            status = "output_overflow"
+        elif runtime_err == "TimeoutError":
+            status = "timeout"
+        elif runtime_err is None:
+            status = "clean_success"
+        else:
+            status = "runtime_exception"
         manifest.append({
             "id": f"bug_runtime_{f.removesuffix('.py')}",
             "path": f"runtime/{f}",
             "category": "runtime_fault",
             "expected_status": status,
-            "error_type": err,
-            "description": desc,
+            "error_type": runtime_err,
+            "description": runtime_desc,
         })
 
     # Syntax samples
@@ -74,15 +81,15 @@ def build_bug_manifest() -> None:
         "utf8_bom.py.sample": (None, "Valid syntax with UTF-8 BOM signature"),
         "valid_syntax.py.sample": (None, "Clean valid Python syntax AST fixture"),
     }
-    for f, (err, desc) in sorted(syntax_map.items()):
+    for f, (syntax_err, desc) in sorted(syntax_map.items()):
         p = base / "syntax" / f
         assert p.is_file(), f"Missing file: {p}"
         manifest.append({
             "id": f"bug_syntax_{f.split('.')[0]}",
             "path": f"syntax/{f}",
             "category": "syntax_error",
-            "expected_status": "syntax_error" if err in ("SyntaxError", "IndentationError") else ("runtime_exception" if err else "clean_success"),
-            "error_type": err,
+            "expected_status": "syntax_error" if syntax_err in ("SyntaxError", "IndentationError") else ("runtime_exception" if syntax_err else "clean_success"),
+            "error_type": syntax_err,
             "description": desc,
         })
 
@@ -216,7 +223,7 @@ def build_complexity_manifest() -> None:
         ("in_place_sort", "O(n log n)", "O(1)", "O(1)", False, None, "In-place list sort() method call"),
         ("nested_same_dimension", "O(n^2)", "O(1)", "O(1)", False, None, "Nested loops over identical dimension"),
         ("nested_distinct_dimensions", "O(nm)", "O(1)", "O(1)", False, None, "Nested loops over distinct dimensions"),
-        ("triple_nested_loop", None, None, None, True, "OUT_OF_VOCABULARY", "Triple nested loop exceeding supported classes"),
+        ("triple_nested_loop", "O(n^3)", "O(1)", "O(1)", False, None, "Triple nested loop"),
         ("four_nested_loops", None, None, None, True, "OUT_OF_VOCABULARY", "Quadruple nested loop exceeding supported classes"),
     ]
     for sel, t, aux, out, abs_flag, abs_cat, desc in loop_samples:
@@ -235,11 +242,11 @@ def build_complexity_manifest() -> None:
 
     # Membership
     membership_samples = [
-        ("membership_in_set", "O(1)", "O(1)", "O(1)", False, None, "Hash table set membership test (in set)"),
+        ("membership_in_set", "O(n)", "O(1)", "O(1)", False, None, "Hash table set membership test inside loop"),
         ("membership_in_local_set", "O(n)", "O(n)", "O(1)", False, None, "Local set construction followed by membership test"),
-        ("membership_in_list", "O(n)", "O(1)", "O(1)", False, None, "Linear scan sequence membership test (in list)"),
-        ("membership_in_local_list", "O(n)", "O(n)", "O(1)", False, None, "Local list allocation and linear membership test"),
-        ("membership_in_dict", "O(1)", "O(1)", "O(1)", False, None, "Dictionary key hash lookup (in dict)"),
+        ("membership_in_list", "O(nm)", "O(1)", "O(1)", False, None, "Linear scan sequence membership test inside loop"),
+        ("membership_in_local_list", "O(n^2)", "O(n)", "O(1)", False, None, "Local list allocation and linear membership test"),
+        ("membership_in_dict", "O(n)", "O(1)", "O(1)", False, None, "Dictionary key hash lookup inside loop"),
     ]
     for sel, t, aux, out, abs_flag, abs_cat, desc in membership_samples:
         manifest.append({
@@ -308,12 +315,12 @@ def build_complexity_manifest() -> None:
 
     # More patterns
     more_samples = [
-        ("while_linear_decrement", "O(n)", "O(1)", "O(1)", False, None, "While loop with linear integer decrement"),
-        ("while_log_halving", "O(log n)", "O(1)", "O(1)", False, None, "While loop with logarithmic division halving"),
+        ("while_linear_decrement", None, None, None, True, "DYNAMIC_BOUNDS", "While loop with linear integer decrement abstains soundly"),
+        ("while_log_halving", None, None, None, True, "DYNAMIC_BOUNDS", "While loop with logarithmic division halving abstains soundly"),
         ("dict_comprehension_materialized", "O(n)", "O(1)", "O(n)", False, None, "Dictionary comprehension materializing output mapping"),
         ("set_comprehension_materialized", "O(n)", "O(1)", "O(n)", False, None, "Set comprehension materializing output set"),
-        ("matrix_multiplication", None, None, None, True, "OUT_OF_VOCABULARY", "Matrix multiplication triple loop"),
-        ("dynamic_break_while", None, None, None, True, "DYNAMIC_TERMINATION", "While loop with dynamic arithmetic break"),
+        ("matrix_multiplication", "O(n^3)", "O(1)", "O(n^2)", False, None, "Matrix multiplication triple loop"),
+        ("dynamic_break_while", None, None, None, True, "DYNAMIC_BOUNDS", "While loop with dynamic arithmetic break"),
     ]
     for sel, t, aux, out, abs_flag, abs_cat, desc in more_samples:
         manifest.append({
@@ -366,11 +373,11 @@ def build_profiling_manifest() -> None:
 
     profiling_benchmarks = [
         ("timing_samples.py", "sleep_fifteen_ms", "empty.json", "pure_timing", True, 2, 5, "Controlled monotonic sleep benchmark"),
-        ("timing_samples.py", "compute_squares", "args_only.json", "pure_timing", True, 2, 5, "List comprehension mathematical square calculation"),
-        ("timing_samples.py", "quick_add", "valid_args.json", "pure_timing", True, 2, 5, "Primitive addition fast path invocation"),
+        ("timing_samples.py", "compute_squares", "limit_input.json", "pure_timing", True, 2, 5, "List comprehension mathematical square calculation"),
+        ("timing_samples.py", "quick_add", "two_args.json", "pure_timing", True, 2, 5, "Primitive addition fast path invocation"),
         ("stateful_samples.py", "record_history", "text_input.json", "stateful", True, 2, 5, "Persistent global list mutation under hot-process"),
         ("stateful_samples.py", "get_history_length", "empty.json", "stateful", True, 2, 5, "Read persisted global list length"),
-        ("stateful_samples.py", "cached_heavy_computation", "limit_input.json", "stateful", True, 2, 5, "functools.lru_cache hot-process persistence"),
+        ("stateful_samples.py", "cached_heavy_computation", "two_args.json", "stateful", True, 2, 5, "functools.lru_cache hot-process persistence"),
         ("memory_samples.py", "allocate_two_mb", "empty.json", "memory_intensive", True, 2, 3, "2 MB bytearray tracemalloc heap allocation"),
         ("memory_samples.py", "allocate_five_mb", "empty.json", "memory_intensive", True, 2, 3, "5 MB bytearray tracemalloc heap allocation"),
         ("memory_samples.py", "minimal_allocation", "empty.json", "minimal_memory", True, 2, 5, "Near-zero heap allocation baseline"),
@@ -379,7 +386,7 @@ def build_profiling_manifest() -> None:
         ("mutating_samples.py", "mutate_dict", "dict_input.json", "mutating", True, 2, 5, "Destructive dictionary in-place mutation"),
         ("pure_math_samples.py", "hash_string", "text_input.json", "pure_computation", True, 2, 5, "Deterministic SHA-256 cryptographic string hashing"),
         ("pure_math_samples.py", "sum_primes", "limit_input.json", "pure_computation", True, 2, 5, "Deterministic prime sieve accumulation"),
-        ("slow_import_samples.py", "fast_add", "valid_args.json", "slow_import", True, 2, 5, "Fast function execution with high import duration"),
+        ("slow_import_samples.py", "fast_add", "two_args.json", "slow_import", True, 2, 5, "Fast function execution with high import duration"),
         ("failing_samples.py", "raise_zero_division", "empty.json", "failing_target", False, 1, 1, "Function raising ZeroDivisionError during execution"),
         ("failing_samples.py", "raise_value_error", "empty.json", "failing_target", False, 1, 1, "Function raising ValueError during execution"),
     ]

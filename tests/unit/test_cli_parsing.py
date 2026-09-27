@@ -365,3 +365,21 @@ def test_successful_main_dispatch(tmp_path: Path) -> None:
     assert code == EXIT_SUCCESS
     assert "localdev INFO" in stdout.getvalue()
 
+
+def test_cli_parsing_model_options() -> None:
+    """Verify --model and --fallback options in CLI parsing."""
+    from localdev.constants import FALLBACK_MODEL
+
+    p1 = parse_cli_args(["analyse", "target.py", "--diagnose", "--model", "custom-model:latest"])
+    assert p1.model == "custom-model:latest"
+    assert p1.fallback is False
+
+    p2 = parse_cli_args(["debug", "target.py", "--diagnose", "--fallback"])
+    assert p2.model == FALLBACK_MODEL
+    assert p2.fallback is True
+
+    p3 = parse_cli_args(["fix", "target.py", "--fallback"])
+    assert p3.model == FALLBACK_MODEL
+    assert p3.fallback is True
+
+

@@ -11,7 +11,7 @@ Enforces:
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TypeVar
+from typing import Self, TypeVar
 
 from pydantic import BaseModel
 
@@ -99,4 +99,16 @@ class BaseInferenceClient(ABC):
     def is_available(self) -> bool:
         """Check if the local inference service is reachable and responsive."""
         ...
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object,
+    ) -> None:
+        """Context manager exit hook for optional resource cleanup."""
+        return None
 

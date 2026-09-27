@@ -24,6 +24,7 @@ from localdev.constants import (
     EXIT_CLI_USAGE_ERROR,
     EXIT_SUCCESS,
     EXIT_TARGET_FAILURE,
+    FALLBACK_MODEL,
 )
 from localdev.errors import (
     CliUsageError,
@@ -81,6 +82,8 @@ class ParsedCliCommand:
     propose_only: bool = False
     warmup: int | None = None
     measured: int | None = None
+    model: str | None = None
+    fallback: bool = False
 
 
 
@@ -284,6 +287,15 @@ def create_parser() -> LocaldevArgumentParser:
         action="store_true",
         help="Request evidence-grounded bug diagnosis from local SLM alongside deterministic static analysis.",
     )
+    p_analyse.add_argument(
+        "--model",
+        help="Specify local SLM model identifier override for diagnosis.",
+    )
+    p_analyse.add_argument(
+        "--fallback",
+        action="store_true",
+        help="Use low-memory fallback SLM model (1.5B tier) for 8 GB RAM budgets.",
+    )
 
     # debug
     p_debug = subparsers.add_parser(
@@ -300,6 +312,15 @@ def create_parser() -> LocaldevArgumentParser:
         "--diagnose",
         action="store_true",
         help="Request evidence-grounded bug diagnosis from local SLM alongside deterministic runtime traceback evidence.",
+    )
+    p_debug.add_argument(
+        "--model",
+        help="Specify local SLM model identifier override for diagnosis.",
+    )
+    p_debug.add_argument(
+        "--fallback",
+        action="store_true",
+        help="Use low-memory fallback SLM model (1.5B tier) for 8 GB RAM budgets.",
     )
     p_debug.add_argument(
         "--stdin-file",
@@ -362,6 +383,15 @@ def create_parser() -> LocaldevArgumentParser:
         dest="propose_only",
         action="store_true",
         help="Display proposed patch and validation results without prompting to apply.",
+    )
+    p_fix.add_argument(
+        "--model",
+        help="Specify local SLM model identifier override for diagnosis and patch proposal.",
+    )
+    p_fix.add_argument(
+        "--fallback",
+        action="store_true",
+        help="Use low-memory fallback SLM model (1.5B tier) for 8 GB RAM budgets.",
     )
 
     # complexity
@@ -484,6 +514,12 @@ def parse_cli_args(argv: Sequence[str]) -> ParsedCliCommand:
         "--keep-session" in before_sep
     )
 
+    model_override = getattr(args, "model", None)
+    fallback_flag = bool(getattr(args, "fallback", False))
+    effective_model = model_override
+    if fallback_flag and not effective_model:
+        effective_model = FALLBACK_MODEL
+
     return ParsedCliCommand(
         command=args.command,
         target=target_str,
@@ -504,6 +540,8 @@ def parse_cli_args(argv: Sequence[str]) -> ParsedCliCommand:
         propose_only=bool(getattr(args, "propose_only", False)),
         warmup=getattr(args, "warmup", None),
         measured=getattr(args, "measured", None),
+        model=effective_model,
+        fallback=fallback_flag,
     )
 
 
@@ -573,6 +611,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 analysis_report = orchestrator.analyse(
                     target_record,
                     diagnose=parsed.diagnose,
+                    model=parsed.model,
                 )
                 if parsed.json_output:
                     analysis_limitations: list[str] = []
@@ -605,6 +644,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     timeout=parsed.timeout,
                     fail_on_job_failure=parsed.fail_on_job_failure,
                     diagnose=parsed.diagnose,
+                    model=parsed.model,
                 )
                 is_success = exec_result.exit_code == 0 and not exec_result.timed_out
                 if parsed.json_output:
@@ -653,6 +693,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     stdin_file=parsed.stdin_file,
                     timeout=parsed.timeout,
                     fail_on_job_failure=parsed.fail_on_job_failure,
+                    model=parsed.model,
                 )
                 if parsed.json_output:
                     fix_limitations: list[str] = []
