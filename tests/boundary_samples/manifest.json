@@ -1,0 +1,151 @@
+{
+  "dataset": "boundary_samples",
+  "version": "1.0.0",
+  "total_samples": 24,
+  "samples": [
+    {
+      "id": "bound_crlf_py",
+      "path": "crlf.py",
+      "category": "line_endings",
+      "description": "CRLF windows line endings (\r\n)"
+    },
+    {
+      "id": "bound_declared_iso8859_py",
+      "path": "declared_iso8859.py",
+      "category": "encodings",
+      "description": "PEP 263 Latin-1 (iso-8859-1) declaration"
+    },
+    {
+      "id": "bound_declared_utf8_py",
+      "path": "declared_utf8.py",
+      "category": "encodings",
+      "description": "PEP 263 UTF-8 declaration"
+    },
+    {
+      "id": "bound_empty_py",
+      "path": "empty.py",
+      "category": "filesystem",
+      "description": "Zero-byte empty file"
+    },
+    {
+      "id": "bound_mixed_newlines_py",
+      "path": "mixed_newlines.py",
+      "category": "line_endings",
+      "description": "Mixed CRLF and LF newlines in same file"
+    },
+    {
+      "id": "bound_no_trailing_newline_py",
+      "path": "no_trailing_newline.py",
+      "category": "line_endings",
+      "description": "File without trailing newline character"
+    },
+    {
+      "id": "bound_spaces_and_unicode_alpha_py",
+      "path": "spaces and unicode alpha.py",
+      "category": "filenames",
+      "description": "Filename containing space characters and Unicode Greek alpha"
+    },
+    {
+      "id": "bound_utf8_bom_py",
+      "path": "utf8_bom.py",
+      "category": "encodings",
+      "description": "UTF-8 with Byte Order Mark (BOM) signature"
+    },
+    {
+      "id": "bound_utf8_plain_py",
+      "path": "utf8_plain.py",
+      "category": "encodings",
+      "description": "Plain standard UTF-8 without BOM"
+    },
+    {
+      "id": "bound_readonly_py",
+      "path": "readonly.py",
+      "category": "permissions",
+      "description": "Target with read-only file attribute"
+    },
+    {
+      "id": "bound_deep_path_level1_level2_level3_nested_target_py",
+      "path": "deep_path/level1/level2/level3/nested_target.py",
+      "category": "filenames",
+      "description": "Deeply nested directory path structure"
+    },
+    {
+      "id": "bound_languages_binary_bin",
+      "path": "languages/binary.bin",
+      "category": "detection",
+      "description": "Binary file with null bytes (unsupported)"
+    },
+    {
+      "id": "bound_languages_conflicting_shebang_py",
+      "path": "languages/conflicting_shebang.py",
+      "category": "detection",
+      "description": ".py extension with conflicting bash shebang (unsupported)"
+    },
+    {
+      "id": "bound_languages_empty_py",
+      "path": "languages/empty.py",
+      "category": "detection",
+      "description": "Empty .py file (supported)"
+    },
+    {
+      "id": "bound_languages_empty_no_ext",
+      "path": "languages/empty_no_ext",
+      "category": "detection",
+      "description": "Empty file without extension (unsupported)"
+    },
+    {
+      "id": "bound_languages_misleading_ext_txt",
+      "path": "languages/misleading_ext.txt",
+      "category": "detection",
+      "description": "Text extension without shebang (unsupported)"
+    },
+    {
+      "id": "bound_languages_misleading_with_shebang_txt",
+      "path": "languages/misleading_with_shebang.txt",
+      "category": "detection",
+      "description": "Text extension with python shebang (probable)"
+    },
+    {
+      "id": "bound_languages_page_html",
+      "path": "languages/page.html",
+      "category": "detection",
+      "description": "HTML file (unsupported)"
+    },
+    {
+      "id": "bound_languages_script_js",
+      "path": "languages/script.js",
+      "category": "detection",
+      "description": "JavaScript file (unsupported)"
+    },
+    {
+      "id": "bound_languages_shebang_broken",
+      "path": "languages/shebang_broken",
+      "category": "detection",
+      "description": "Broken shebang syntax (unsupported)"
+    },
+    {
+      "id": "bound_languages_shebang_script",
+      "path": "languages/shebang_script",
+      "category": "detection",
+      "description": "Extensionless script with python shebang (certain)"
+    },
+    {
+      "id": "bound_languages_valid_py",
+      "path": "languages/valid.py",
+      "category": "detection",
+      "description": "Valid python script (certain)"
+    },
+    {
+      "id": "bound_processes_spawn_child_py",
+      "path": "processes/spawn_child.py",
+      "category": "processes",
+      "description": "Subprocess spawning child process"
+    },
+    {
+      "id": "bound_processes_spawn_tree_py",
+      "path": "processes/spawn_tree.py",
+      "category": "processes",
+      "description": "Subprocess spawning hierarchical process tree"
+    }
+  ]
+}

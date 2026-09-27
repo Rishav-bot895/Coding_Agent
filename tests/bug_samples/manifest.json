@@ -1,0 +1,583 @@
+{
+  "dataset": "bug_samples",
+  "version": "1.0.0",
+  "total_samples": 72,
+  "samples": [
+    {
+      "id": "bug_initial_01",
+      "path": "initial/01_off_by_one.py",
+      "category": "initial_slm",
+      "expected_status": "runtime_exception",
+      "error_type": "IndexError",
+      "description": "Off by one list indexing error"
+    },
+    {
+      "id": "bug_initial_02",
+      "path": "initial/02_zero_division.py",
+      "category": "initial_slm",
+      "expected_status": "runtime_exception",
+      "error_type": "ZeroDivisionError",
+      "description": "Division by zero in percentage calculation"
+    },
+    {
+      "id": "bug_initial_03",
+      "path": "initial/03_type_mismatch.py",
+      "category": "initial_slm",
+      "expected_status": "runtime_exception",
+      "error_type": "TypeError",
+      "description": "String and integer concatenation type error"
+    },
+    {
+      "id": "bug_initial_04",
+      "path": "initial/04_key_error.py",
+      "category": "initial_slm",
+      "expected_status": "runtime_exception",
+      "error_type": "KeyError",
+      "description": "Missing key in dictionary lookup"
+    },
+    {
+      "id": "bug_initial_05",
+      "path": "initial/05_attribute_error.py",
+      "category": "initial_slm",
+      "expected_status": "runtime_exception",
+      "error_type": "AttributeError",
+      "description": "Calling strip() on None object"
+    },
+    {
+      "id": "bug_initial_06",
+      "path": "initial/06_unbound_local.py",
+      "category": "initial_slm",
+      "expected_status": "runtime_exception",
+      "error_type": "UnboundLocalError",
+      "description": "Referencing local before assignment in function scope"
+    },
+    {
+      "id": "bug_initial_07",
+      "path": "initial/07_recursion_error.py",
+      "category": "initial_slm",
+      "expected_status": "runtime_exception",
+      "error_type": "RecursionError",
+      "description": "Infinite recursive call exceeding maximum depth"
+    },
+    {
+      "id": "bug_initial_08",
+      "path": "initial/08_empty_sequence.py",
+      "category": "initial_slm",
+      "expected_status": "runtime_exception",
+      "error_type": "IndexError",
+      "description": "Accessing first element of empty sequence"
+    },
+    {
+      "id": "bug_initial_09",
+      "path": "initial/09_name_error.py",
+      "category": "initial_slm",
+      "expected_status": "runtime_exception",
+      "error_type": "NameError",
+      "description": "Accessing undefined variable in calculation"
+    },
+    {
+      "id": "bug_initial_10",
+      "path": "initial/10_value_error.py",
+      "category": "initial_slm",
+      "expected_status": "runtime_exception",
+      "error_type": "ValueError",
+      "description": "Parsing invalid numeric string literal with int()"
+    },
+    {
+      "id": "bug_runtime_blocking_stdin",
+      "path": "runtime/blocking_stdin.py",
+      "category": "runtime_fault",
+      "expected_status": "runtime_exception",
+      "error_type": "BlockingIOError",
+      "description": "Attempting blocking sys.stdin read"
+    },
+    {
+      "id": "bug_runtime_clean_exit",
+      "path": "runtime/clean_exit.py",
+      "category": "runtime_fault",
+      "expected_status": "clean_success",
+      "error_type": null,
+      "description": "Clean runtime process exit with code 0"
+    },
+    {
+      "id": "bug_runtime_infinite_loop",
+      "path": "runtime/infinite_loop.py",
+      "category": "runtime_fault",
+      "expected_status": "timeout",
+      "error_type": "TimeoutError",
+      "description": "Infinite loop breaching timeout limits"
+    },
+    {
+      "id": "bug_runtime_mixed_output",
+      "path": "runtime/mixed_output.py",
+      "category": "runtime_fault",
+      "expected_status": "clean_success",
+      "error_type": null,
+      "description": "Emitting mixed stdout and stderr streams"
+    },
+    {
+      "id": "bug_runtime_nonzero_exit",
+      "path": "runtime/nonzero_exit.py",
+      "category": "runtime_fault",
+      "expected_status": "runtime_exception",
+      "error_type": "SystemExit",
+      "description": "Explicit sys.exit(42) with non-zero exit code"
+    },
+    {
+      "id": "bug_runtime_stderr_flood",
+      "path": "runtime/stderr_flood.py",
+      "category": "runtime_fault",
+      "expected_status": "clean_success",
+      "error_type": null,
+      "description": "Emitting high-volume stderr stream exceeding buffer thresholds"
+    },
+    {
+      "id": "bug_runtime_stdout_flood",
+      "path": "runtime/stdout_flood.py",
+      "category": "runtime_fault",
+      "expected_status": "clean_success",
+      "error_type": null,
+      "description": "Emitting high-volume stdout stream exceeding buffer thresholds"
+    },
+    {
+      "id": "bug_syntax_crlf_newlines",
+      "path": "syntax/crlf_newlines.py.sample",
+      "category": "syntax_error",
+      "expected_status": "clean_success",
+      "error_type": null,
+      "description": "Valid syntax with CRLF newlines"
+    },
+    {
+      "id": "bug_syntax_indent_unexpected",
+      "path": "syntax/indent_unexpected.py.sample",
+      "category": "syntax_error",
+      "expected_status": "syntax_error",
+      "error_type": "IndentationError",
+      "description": "Unexpected indentation level"
+    },
+    {
+      "id": "bug_syntax_indent_unindent",
+      "path": "syntax/indent_unindent.py.sample",
+      "category": "syntax_error",
+      "expected_status": "syntax_error",
+      "error_type": "IndentationError",
+      "description": "Unindent does not match any outer indentation level"
+    },
+    {
+      "id": "bug_syntax_pep263_latin1",
+      "path": "syntax/pep263_latin1.py.sample",
+      "category": "syntax_error",
+      "expected_status": "clean_success",
+      "error_type": null,
+      "description": "Valid syntax with Latin-1 PEP 263 encoding"
+    },
+    {
+      "id": "bug_syntax_pep263_unknown",
+      "path": "syntax/pep263_unknown.py.sample",
+      "category": "syntax_error",
+      "expected_status": "syntax_error",
+      "error_type": "SyntaxError",
+      "description": "Unknown PEP 263 source encoding declaration"
+    },
+    {
+      "id": "bug_syntax_side_effects_dangerous",
+      "path": "syntax/side_effects_dangerous.py.sample",
+      "category": "syntax_error",
+      "expected_status": "runtime_exception",
+      "error_type": "RuntimeError",
+      "description": "File with dangerous top-level runtime side effects"
+    },
+    {
+      "id": "bug_syntax_syntax_invalid_token",
+      "path": "syntax/syntax_invalid_token.py.sample",
+      "category": "syntax_error",
+      "expected_status": "syntax_error",
+      "error_type": "SyntaxError",
+      "description": "Invalid token in binary expression"
+    },
+    {
+      "id": "bug_syntax_syntax_missing_colon",
+      "path": "syntax/syntax_missing_colon.py.sample",
+      "category": "syntax_error",
+      "expected_status": "syntax_error",
+      "error_type": "SyntaxError",
+      "description": "Missing colon after function signature"
+    },
+    {
+      "id": "bug_syntax_syntax_unclosed_paren",
+      "path": "syntax/syntax_unclosed_paren.py.sample",
+      "category": "syntax_error",
+      "expected_status": "syntax_error",
+      "error_type": "SyntaxError",
+      "description": "Unclosed opening parenthesis"
+    },
+    {
+      "id": "bug_syntax_utf8_bom",
+      "path": "syntax/utf8_bom.py.sample",
+      "category": "syntax_error",
+      "expected_status": "clean_success",
+      "error_type": null,
+      "description": "Valid syntax with UTF-8 BOM signature"
+    },
+    {
+      "id": "bug_syntax_valid_syntax",
+      "path": "syntax/valid_syntax.py.sample",
+      "category": "syntax_error",
+      "expected_status": "clean_success",
+      "error_type": null,
+      "description": "Clean valid Python syntax AST fixture"
+    },
+    {
+      "id": "bug_std_attribute_error_none",
+      "path": "standard_exceptions/attribute_error_none.py",
+      "category": "standard_exception",
+      "expected_status": "runtime_exception",
+      "error_type": "AttributeError",
+      "description": "AttributeError on NoneType method call"
+    },
+    {
+      "id": "bug_std_file_not_found_read",
+      "path": "standard_exceptions/file_not_found_read.py",
+      "category": "standard_exception",
+      "expected_status": "runtime_exception",
+      "error_type": "FileNotFoundError",
+      "description": "FileNotFoundError opening nonexistent file"
+    },
+    {
+      "id": "bug_std_index_error_empty_pop",
+      "path": "standard_exceptions/index_error_empty_pop.py",
+      "category": "standard_exception",
+      "expected_status": "runtime_exception",
+      "error_type": "IndexError",
+      "description": "IndexError popping from empty list"
+    },
+    {
+      "id": "bug_std_key_error_nested_dict",
+      "path": "standard_exceptions/key_error_nested_dict.py",
+      "category": "standard_exception",
+      "expected_status": "runtime_exception",
+      "error_type": "KeyError",
+      "description": "KeyError accessing nonexistent nested key"
+    },
+    {
+      "id": "bug_std_name_error_typo",
+      "path": "standard_exceptions/name_error_typo.py",
+      "category": "standard_exception",
+      "expected_status": "runtime_exception",
+      "error_type": "NameError",
+      "description": "NameError due to misspelled variable name"
+    },
+    {
+      "id": "bug_std_type_error_not_callable",
+      "path": "standard_exceptions/type_error_not_callable.py",
+      "category": "standard_exception",
+      "expected_status": "runtime_exception",
+      "error_type": "TypeError",
+      "description": "TypeError calling non-callable integer"
+    },
+    {
+      "id": "bug_std_type_error_unsubscriptable",
+      "path": "standard_exceptions/type_error_unsubscriptable.py",
+      "category": "standard_exception",
+      "expected_status": "runtime_exception",
+      "error_type": "TypeError",
+      "description": "TypeError subscripting NoneType object"
+    },
+    {
+      "id": "bug_std_type_error_unsupported_operand",
+      "path": "standard_exceptions/type_error_unsupported_operand.py",
+      "category": "standard_exception",
+      "expected_status": "runtime_exception",
+      "error_type": "TypeError",
+      "description": "TypeError adding int and str"
+    },
+    {
+      "id": "bug_std_unbound_local_reassign",
+      "path": "standard_exceptions/unbound_local_reassign.py",
+      "category": "standard_exception",
+      "expected_status": "runtime_exception",
+      "error_type": "UnboundLocalError",
+      "description": "UnboundLocalError reassigning global without declaration"
+    },
+    {
+      "id": "bug_std_value_error_int_literal",
+      "path": "standard_exceptions/value_error_int_literal.py",
+      "category": "standard_exception",
+      "expected_status": "runtime_exception",
+      "error_type": "ValueError",
+      "description": "ValueError parsing non-numeric string as int"
+    },
+    {
+      "id": "bug_std_value_error_unpack_mismatch",
+      "path": "standard_exceptions/value_error_unpack_mismatch.py",
+      "category": "standard_exception",
+      "expected_status": "runtime_exception",
+      "error_type": "ValueError",
+      "description": "ValueError unpacking sequence of wrong length"
+    },
+    {
+      "id": "bug_std_zero_division_modulo",
+      "path": "standard_exceptions/zero_division_modulo.py",
+      "category": "standard_exception",
+      "expected_status": "runtime_exception",
+      "error_type": "ZeroDivisionError",
+      "description": "ZeroDivisionError calculating modulo zero"
+    },
+    {
+      "id": "bug_logic_accidental_tuple",
+      "path": "logic/accidental_tuple.py",
+      "category": "logic_bug",
+      "expected_status": "assertion_failure",
+      "error_type": "AssertionError",
+      "description": "Trailing comma converts scalar to single-element tuple"
+    },
+    {
+      "id": "bug_logic_early_return_in_loop",
+      "path": "logic/early_return_in_loop.py",
+      "category": "logic_bug",
+      "expected_status": "assertion_failure",
+      "error_type": "AssertionError",
+      "description": "Return inside loop body prematurely terminates iteration"
+    },
+    {
+      "id": "bug_logic_float_equality",
+      "path": "logic/float_equality.py",
+      "category": "logic_bug",
+      "expected_status": "assertion_failure",
+      "error_type": "AssertionError",
+      "description": "Exact floating-point equality check fails IEEE-754 representation"
+    },
+    {
+      "id": "bug_logic_incorrect_accumulator",
+      "path": "logic/incorrect_accumulator.py",
+      "category": "logic_bug",
+      "expected_status": "assertion_failure",
+      "error_type": "AssertionError",
+      "description": "Multiplication accumulator initialized to 0 instead of 1"
+    },
+    {
+      "id": "bug_logic_inverted_boolean",
+      "path": "logic/inverted_boolean.py",
+      "category": "logic_bug",
+      "expected_status": "assertion_failure",
+      "error_type": "AssertionError",
+      "description": "Inverted boolean logical operator in authorization check"
+    },
+    {
+      "id": "bug_logic_mutable_default_arg",
+      "path": "logic/mutable_default_arg.py",
+      "category": "logic_bug",
+      "expected_status": "assertion_failure",
+      "error_type": "AssertionError",
+      "description": "Mutable default argument accumulates state across calls"
+    },
+    {
+      "id": "bug_logic_off_by_one_range",
+      "path": "logic/off_by_one_range.py",
+      "category": "logic_bug",
+      "expected_status": "assertion_failure",
+      "error_type": "AssertionError",
+      "description": "Range bounds off-by-one skipping last element in sequence"
+    },
+    {
+      "id": "bug_logic_reversed_sort_flag",
+      "path": "logic/reversed_sort_flag.py",
+      "category": "logic_bug",
+      "expected_status": "assertion_failure",
+      "error_type": "AssertionError",
+      "description": "Sort flag reverse=False when descending order intended"
+    },
+    {
+      "id": "bug_logic_shadowing_builtin",
+      "path": "logic/shadowing_builtin.py",
+      "category": "logic_bug",
+      "expected_status": "assertion_failure",
+      "error_type": "AssertionError",
+      "description": "Variable name shadows builtin function name"
+    },
+    {
+      "id": "bug_logic_shallow_copy_mutation",
+      "path": "logic/shallow_copy_mutation.py",
+      "category": "logic_bug",
+      "expected_status": "assertion_failure",
+      "error_type": "AssertionError",
+      "description": "Shallow copy mutates nested lists in original data"
+    },
+    {
+      "id": "bug_logic_string_immutable_replace",
+      "path": "logic/string_immutable_replace.py",
+      "category": "logic_bug",
+      "expected_status": "assertion_failure",
+      "error_type": "AssertionError",
+      "description": "String replace return value discarded"
+    },
+    {
+      "id": "bug_logic_wrong_comparison_operator",
+      "path": "logic/wrong_comparison_operator.py",
+      "category": "logic_bug",
+      "expected_status": "assertion_failure",
+      "error_type": "AssertionError",
+      "description": "Object identity operator is used instead of equality =="
+    },
+    {
+      "id": "clean_binary_search_clean",
+      "path": "clean/binary_search_clean.py",
+      "category": "clean_program",
+      "expected_status": "clean_success",
+      "error_type": null,
+      "description": "Iterative binary search algorithm returning element index"
+    },
+    {
+      "id": "clean_caesar_cipher_clean",
+      "path": "clean/caesar_cipher_clean.py",
+      "category": "clean_program",
+      "expected_status": "clean_success",
+      "error_type": null,
+      "description": "Caesar cipher shift encryption and symmetric decryption"
+    },
+    {
+      "id": "clean_csv_row_clean",
+      "path": "clean/csv_row_clean.py",
+      "category": "clean_program",
+      "expected_status": "clean_success",
+      "error_type": null,
+      "description": "CSV header and row tokenizer producing structured dictionaries"
+    },
+    {
+      "id": "clean_fibonacci_clean",
+      "path": "clean/fibonacci_clean.py",
+      "category": "clean_program",
+      "expected_status": "clean_success",
+      "error_type": null,
+      "description": "Iterative Fibonacci number calculation"
+    },
+    {
+      "id": "clean_json_parser_clean",
+      "path": "clean/json_parser_clean.py",
+      "category": "clean_program",
+      "expected_status": "clean_success",
+      "error_type": null,
+      "description": "JSON record serialization, deserialization, and schema validation"
+    },
+    {
+      "id": "clean_lru_cache_clean",
+      "path": "clean/lru_cache_clean.py",
+      "category": "clean_program",
+      "expected_status": "clean_success",
+      "error_type": null,
+      "description": "Generic Least Recently Used (LRU) bounded cache"
+    },
+    {
+      "id": "clean_matrix_transpose_clean",
+      "path": "clean/matrix_transpose_clean.py",
+      "category": "clean_program",
+      "expected_status": "clean_success",
+      "error_type": null,
+      "description": "2D list matrix transpose transformation"
+    },
+    {
+      "id": "clean_prime_sieve_clean",
+      "path": "clean/prime_sieve_clean.py",
+      "category": "clean_program",
+      "expected_status": "clean_success",
+      "error_type": null,
+      "description": "Sieve of Eratosthenes prime number generator"
+    },
+    {
+      "id": "clean_quicksort_clean",
+      "path": "clean/quicksort_clean.py",
+      "category": "clean_program",
+      "expected_status": "clean_success",
+      "error_type": null,
+      "description": "Deterministic quicksort list ordering"
+    },
+    {
+      "id": "clean_stack_data_structure_clean",
+      "path": "clean/stack_data_structure_clean.py",
+      "category": "clean_program",
+      "expected_status": "clean_success",
+      "error_type": null,
+      "description": "Object-oriented generic Stack data structure"
+    },
+    {
+      "id": "clean_stats_clean",
+      "path": "clean/stats_clean.py",
+      "category": "clean_program",
+      "expected_status": "clean_success",
+      "error_type": null,
+      "description": "Mean, count, and standard deviation summary calculations"
+    },
+    {
+      "id": "clean_string_palindrome_clean",
+      "path": "clean/string_palindrome_clean.py",
+      "category": "clean_program",
+      "expected_status": "clean_success",
+      "error_type": null,
+      "description": "Alphanumeric palindrome validator with case normalization"
+    },
+    {
+      "id": "bug_ext_broken_helper_runtime",
+      "path": "external_dependencies/broken_helper_runtime.py",
+      "category": "external_dependency",
+      "expected_status": "import_error",
+      "error_type": "RuntimeError",
+      "description": "Helper module raising RuntimeError on import"
+    },
+    {
+      "id": "bug_ext_circular_import_a",
+      "path": "external_dependencies/circular_import_a.py",
+      "category": "external_dependency",
+      "expected_status": "import_error",
+      "error_type": "ImportError",
+      "description": "Circular module import dependency cycle A"
+    },
+    {
+      "id": "bug_ext_circular_import_b",
+      "path": "external_dependencies/circular_import_b.py",
+      "category": "external_dependency",
+      "expected_status": "import_error",
+      "error_type": "ImportError",
+      "description": "Circular module import dependency cycle B"
+    },
+    {
+      "id": "bug_ext_import_runtime_error",
+      "path": "external_dependencies/import_runtime_error.py",
+      "category": "external_dependency",
+      "expected_status": "import_error",
+      "error_type": "RuntimeError",
+      "description": "Importing module with top-level initialization failure"
+    },
+    {
+      "id": "bug_ext_missing_attribute",
+      "path": "external_dependencies/missing_attribute.py",
+      "category": "external_dependency",
+      "expected_status": "import_error",
+      "error_type": "AttributeError",
+      "description": "Accessing nonexistent attribute on standard library module"
+    },
+    {
+      "id": "bug_ext_missing_from_import",
+      "path": "external_dependencies/missing_from_import.py",
+      "category": "external_dependency",
+      "expected_status": "import_error",
+      "error_type": "ImportError",
+      "description": "Importing nonexistent symbol from existing module"
+    },
+    {
+      "id": "bug_ext_missing_module",
+      "path": "external_dependencies/missing_module.py",
+      "category": "external_dependency",
+      "expected_status": "import_error",
+      "error_type": "ModuleNotFoundError",
+      "description": "Importing nonexistent external third-party module"
+    },
+    {
+      "id": "bug_ext_relative_import_error",
+      "path": "external_dependencies/relative_import_error.py",
+      "category": "external_dependency",
+      "expected_status": "import_error",
+      "error_type": "ImportError",
+      "description": "Attempting relative import beyond top-level package"
+    }
+  ]
+}

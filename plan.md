@@ -1371,7 +1371,7 @@ python -m mypy --strict localdev
 
 ## P12-T1 — Build the evaluation datasets and harness
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Construct versioned, reproducible evaluation datasets and an automated evaluation harness covering deterministic correctness, SLM diagnosis, patch safety, complexity accuracy, profiling stability, and cleanup. Record exact pinned toolchain and model versions for personal-project evaluation reproducibility.
 
