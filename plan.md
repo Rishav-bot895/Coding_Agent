@@ -1444,7 +1444,7 @@ python -m mypy --strict localdev
 
 ## P12-T4 — Complete user, architecture, security, and operations documentation
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Author clear, technically accurate documentation detailing installation, offline configuration, command usage, architecture, security boundaries, Runtime & Isolation Contract, validation levels, and limitations.
 
@@ -1470,7 +1470,7 @@ python -m mypy --strict localdev
 
 ## P12-T5 — Rehearse and sign off the final demonstration
 
-**Status:** Backlog
+**Status:** done
 
 **Definition:** Prepare a clean, self-contained Python demonstration fixture and deliver a structured, four-part presentation script showcasing the primary debug-and-fix workflow, static complexity, function profiling, and honest abstention.
 

@@ -171,3 +171,105 @@ Complexity analysis estimates asymptotic upper bounds grounded in **CPython runt
   - **Output Space:** Memory escaping as returned structures.
 - **Mandatory Abstention:** If execution contains unknown function calls, dynamic loop bounds, non-linear recursion, or external library calls, `localdev` immediately emits `UNKNOWN` with an explicit abstention reason code (`UNKNOWN_CALL`, `DYNAMIC_BOUNDS`, `DYNAMIC_RECURSION`, `EXTERNAL_DEPENDENCY`, `UNSUPPORTED_SYNTAX`).
 
+---
+
+## 8. Guarded File Replacement Architecture & Same-Volume Staging
+
+Atomic file mutation is engineered to prevent partial writes, corruption, or unintentional overwriting of user changes:
+
+```mermaid
+flowchart TD
+    Candidate[Staged Candidate Source] --> VolCheck[Volume Root Resolution\nGetVolumePathNameW]
+    Target[Target File on Disk] --> VolCheck
+    VolCheck --> SameVol{Candidate on Same Volume?}
+    SameVol -->|No| FailCross[Fail Closed: Cross-Volume Error]
+    SameVol -->|Yes| StaleCheck[Compare-Before-Replace\nSHA-256 Hash Check]
+    StaleCheck --> HashMatch{Hash Matches Baseline?}
+    HashMatch -->|No| StaleAbort[Abort: StaleEditError]
+    HashMatch -->|Yes| GateCheck{Validation Level A Passed?}
+    GateCheck -->|No| GateAbort[Abort: Mutation Rejected]
+    GateCheck -->|Yes| AuthCheck{Write Authorized?\n--apply or User Prompt}
+    AuthCheck -->|No| UserDecline[Decline / Propose Only]
+    AuthCheck -->|Yes| ReplaceFileW[Win32 ReplaceFileW\nlpBackupFileName, dwReplaceFlags=0]
+    ReplaceFileW --> BackupDone[Target Updated Atomically\nNative .bak Backup Created]
+```
+
+1. **Win32 `ReplaceFileW` Kernel Semantics:**
+   `localdev` invokes `ReplaceFileW(lpReplacedFileName, lpReplacementFileName, lpBackupFileName, 0, NULL, NULL)` directly via `ctypes.windll.kernel32`. Unlike Python's `os.replace` (which calls Win32 `MoveFileExW` and destroys backup capabilities), `ReplaceFileW` provides:
+   - Atomic directory-entry exchange within the NTFS Master File Table (MFT).
+   - Atomic creation of a backup file (`<target>.bak`) containing the original file contents immediately before replacement.
+   - Preservation of file attributes, creation times, and access control lists (ACLs).
+2. **Same-Volume Staging Invariant:**
+   `ReplaceFileW` is a single-volume kernel operation. Attempting to replace files across different drive letters or volume GUIDs fails with `ERROR_NOT_SAME_DEVICE` (Win32 error 17). To guarantee success:
+   - General session metadata and execution copies reside in `%TEMP%\localdev\session_<id>` (typically drive `C:`).
+   - Candidate patch files are staged within `<target_drive>:\.localdev_staging\...` on the target file's volume.
+   - Backup files are placed alongside the target on the same volume (`<target>.bak`).
+3. **Compare-Before-Replace SHA-256 Stale-Edit Detection:**
+   Immediately prior to invoking `ReplaceFileW`, `localdev` recalculates the SHA-256 checksum of the target file. If the hash differs from the initial baseline hash, the command immediately aborts with `StaleEditError`. This guarantees that edits made by the user in an external editor during analysis are never silently overwritten.
+4. **Safety Gate Invariant (No `--force`):**
+   The noninteractive `--apply` flag authorizes file mutation without prompting, but **never** bypasses SHA-256 checks, Level A static validation, or reparse-point rejection. No `--force` bypass exists.
+
+---
+
+## 9. Hot-Process Profiling Architecture
+
+`localdev profile` evaluates performance under hot-process execution semantics, isolating module initialization cost from repeated runtime invocations:
+
+```mermaid
+sequenceDiagram
+    participant Orch as Orchestrator
+    participant Ollama as Ollama Service (:11434)
+    participant Worker as Worker Subprocess (loader.py)
+    participant Sampler as Parent RSS Sampler Thread
+
+    Orch->>Ollama: POST /api/generate (keep_alive: 0) [Unload Model]
+    Note over Ollama: Free ~2.18 GB RAM back to OS
+    Orch->>Worker: Spawn disposable worker (-E -B -P)
+    Worker->>Worker: Stage 1: Measure module import duration (perf_counter)
+    Worker->>Worker: Stage 2: Execute warmup runs (default: 2)
+    Orch->>Sampler: Start external RSS sampling thread (20ms interval)
+    Worker->>Worker: Stage 3: Execute measured runs (default: 7) with tracemalloc
+    Note over Worker: Module state & globals persist across runs
+    Sampler->>Sampler: Track peak working set across worker process tree
+    Worker-->>Orch: Return JSON payload (import ms, latency stats, heap bytes)
+    Sampler-->>Orch: Return peak process tree RSS bytes
+    Orch->>Worker: Reap worker subprocess (Windows Job Object)
+```
+
+1. **Separated Timing Dimensions:**
+   - **Import Duration:** Cold module import latency is captured separately using high-resolution monotonic clocks (`time.perf_counter()`).
+   - **Invocation Latency:** Measured runs track per-call execution latency, reporting min, max, median, mean, and standard deviation.
+2. **Hot-Process Execution Semantics:**
+   The module is imported once into the worker subprocess. Subsequent calls reuse persistent module state, cached globals, and JIT/bytecode structures, accurately reflecting hot-path performance in production.
+3. **Dual Memory Instrumentation:**
+   - **Python Heap Allocations (`tracemalloc`):** Traces exact Python object allocations within CPython's small-object and arena allocators, measuring peak and cumulative bytes without interpreter overhead.
+   - **Worker Process Tree RSS (`psutil`):** Sampled externally by the parent orchestrator every 20 ms (50 Hz), capturing total resident working set across the worker and any descendant processes.
+4. **Pre-Profiling Model Eviction:**
+   Before launching the worker, `Orchestrator.profile()` invokes `client.unload_model()` to evict loaded SLM weights from RAM, guaranteeing > 5 GB of free system memory for profiling.
+
+---
+
+## 10. Error Hierarchy and Stable Exit Codes
+
+Every application failure maps directly to a deterministic, typed exception and a stable numeric exit code:
+
+| Exit Code | Constant | Exception Class | Description |
+|---|---|---|---|
+| **0** | `EXIT_SUCCESS` | N/A | Command completed cleanly; target valid or patch applied. |
+| **1** | `EXIT_TARGET_FAILURE` | `TargetInvocationError` | Target execution failed, unhandled exception raised, or candidate validation failed. |
+| **2** | `EXIT_CLI_USAGE_ERROR` | `CliUsageError`<br>`MalformedSelectorError`<br>`SelectorNotFoundError`<br>`MultipleTargetsError`<br>`ProfileInputError` | Invalid CLI invocation, syntax error in arguments, or invalid selector. |
+| **3** | `EXIT_TARGET_IO_ERROR` | `TargetValidationError`<br>`StaleEditError` | Target file missing, invalid encoding, permission denied, or stale edit detected. |
+| **4** | `EXIT_TIMEOUT_RESOURCE_BREACH` | `ExecutionTimeoutError`<br>`OutputByteCapError`<br>`ResourceBreachError` | Subprocess wall-clock timeout exceeded (> 10s) or output byte limit breached (> 512 KB). |
+| **5** | `EXIT_INFERENCE_ERROR` | `InferenceError`<br>`ModelUnavailableError`<br>`NonLocalUrlError` | Local Ollama daemon unreachable, model not loaded, or endpoint non-local. |
+| **6** | `EXIT_ABSTENTION` | `PromptBudgetExceededError`<br>`ComplexityAbstention` | Command soundly abstained due to prompt limits or indeterminate complexity. |
+
+---
+
+## 11. Technical Limitations and Bounded Scope
+
+1. **Strictly Single-Target:** Multi-file refactoring, package-level renaming, and cross-file import graph traversal are intentionally out of scope.
+2. **No Autonomous Tool Execution:** The local SLM does not have direct access to a bash/powershell shell, filesystem write tools, or network sockets. All actions are mediated through deterministic validators.
+3. **Non-Sandbox Execution:** Operational limits terminate runaways, but do not isolate against malicious code execution.
+4. **Platform Binding:** Supported exclusively on Windows 11 x64.
+
+
