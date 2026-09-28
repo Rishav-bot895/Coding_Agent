@@ -106,6 +106,7 @@ def collect_debug_evidence(
     orchestrator: Orchestrator,
     target: TargetRecord,
     target_args: Sequence[str] | None = None,
+    stdin_data: str | None = None,
     stdin_file: str | Path | None = None,
     timeout: float | None = None,
     fail_on_job_failure: bool = False,
@@ -124,6 +125,7 @@ def collect_debug_evidence(
         orchestrator: Active agent orchestrator.
         target: Validated target file metadata.
         target_args: Optional CLI arguments passed after '--' to the target script.
+        stdin_data: Optional string supplying standard input.
         stdin_file: Optional file path supplying standard input.
         timeout: Optional wall-clock timeout override.
         fail_on_job_failure: Whether to fail closed on Job Object creation/assignment failure.
@@ -142,6 +144,7 @@ def collect_debug_evidence(
             target=target,
             session_target=session.session_target_file,
             target_args=target_args,
+            stdin_data=stdin_data,
             stdin_file=stdin_file,
             timeout=timeout,
             fail_on_job_failure=fail_on_job_failure,
@@ -153,6 +156,7 @@ def collect_debug_evidence(
             target=target,
             session_target=temp_session.session_target_file,
             target_args=target_args,
+            stdin_data=stdin_data,
             stdin_file=stdin_file,
             timeout=timeout,
             fail_on_job_failure=fail_on_job_failure,
@@ -163,6 +167,7 @@ def _execute_and_parse(
     target: TargetRecord,
     session_target: Path,
     target_args: Sequence[str] | None = None,
+    stdin_data: str | None = None,
     stdin_file: str | Path | None = None,
     timeout: float | None = None,
     fail_on_job_failure: bool = False,
@@ -171,6 +176,7 @@ def _execute_and_parse(
     req = build_execution_request(
         target_path=session_target,
         args=list(target_args) if target_args else None,
+        stdin_data=stdin_data,
         stdin_file=stdin_file,
         cwd=Path.cwd(),
     )

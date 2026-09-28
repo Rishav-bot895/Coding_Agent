@@ -135,6 +135,7 @@ class LanguageAdapter(abc.ABC):
         targeted_diagnostics: Sequence[DiagnosticRecord | str] | None = None,
         baseline_syntax_valid: bool = True,
         target_args: Sequence[str] | None = None,
+        stdin_data: str | None = None,
         stdin_file: str | Path | None = None,
         timeout: float | None = None,
         fail_on_job_failure: bool = False,

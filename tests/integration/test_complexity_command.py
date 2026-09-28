@@ -352,3 +352,82 @@ def test_complexity_subprocess_execution(tmp_path: Path) -> None:
     assert payload["success"] is True
     assert payload["data"]["time_complexity"] == "O(2^n)"
     assert payload["data"]["auxiliary_space"] == "O(n)"
+
+
+def test_complexity_top_level_script_linear_loop(tmp_path: Path) -> None:
+    """Verify top-level script with input() and range(n) loop evaluates to O(n)."""
+    target_file = tmp_path / "script_linear.py"
+    target_file.write_text(
+        "n = int(input('Enter n: '))\n"
+        "for i in range(n):\n"
+        "    print(i)\n",
+        encoding="utf-8",
+    )
+
+    stdout = io.StringIO()
+    with redirect_stdout(stdout):
+        exit_code = main(["complexity", str(target_file), "--json"])
+
+    assert exit_code == EXIT_SUCCESS
+    payload = json.loads(stdout.getvalue())
+    assert payload["success"] is True
+    reports = payload["data"]
+    assert len(reports) == 1
+    report = ComplexityReport.model_validate(reports[0])
+    assert report.time_complexity == ComplexityClassEnum.O_N
+    assert report.auxiliary_space == ComplexityClassEnum.O_1
+    assert report.output_space == ComplexityClassEnum.O_1
+    assert report.start_line == 1
+    assert report.end_line == 3
+    assert any("line 2" in a and "n" in a for a in report.assumptions)
+
+
+def test_complexity_top_level_script_constant(tmp_path: Path) -> None:
+    """Verify top-level script with constant statements evaluates to O(1)."""
+    target_file = tmp_path / "script_const.py"
+    target_file.write_text(
+        "a = int('42')\n"
+        "b = round(3.14)\n"
+        "print(a + b)\n",
+        encoding="utf-8",
+    )
+
+    stdout = io.StringIO()
+    with redirect_stdout(stdout):
+        exit_code = main(["complexity", str(target_file), "--json"])
+
+    assert exit_code == EXIT_SUCCESS
+    payload = json.loads(stdout.getvalue())
+    assert payload["success"] is True
+    reports = payload["data"]
+    assert len(reports) == 1
+    report = ComplexityReport.model_validate(reports[0])
+    assert report.time_complexity == ComplexityClassEnum.O_1
+    assert report.auxiliary_space == ComplexityClassEnum.O_1
+    assert report.output_space == ComplexityClassEnum.O_1
+
+
+def test_complexity_top_level_script_nested_loop(tmp_path: Path) -> None:
+    """Verify top-level script with nested loops evaluates to O(n²)."""
+    target_file = tmp_path / "script_nested.py"
+    target_file.write_text(
+        "n = int(input())\n"
+        "for i in range(n):\n"
+        "    for j in range(n):\n"
+        "        print(i, j)\n",
+        encoding="utf-8",
+    )
+
+    stdout = io.StringIO()
+    with redirect_stdout(stdout):
+        exit_code = main(["complexity", str(target_file), "--json"])
+
+    assert exit_code == EXIT_SUCCESS
+    payload = json.loads(stdout.getvalue())
+    assert payload["success"] is True
+    reports = payload["data"]
+    assert len(reports) == 1
+    report = ComplexityReport.model_validate(reports[0])
+    assert report.time_complexity == ComplexityClassEnum.O_N2
+    assert report.auxiliary_space == ComplexityClassEnum.O_1
+

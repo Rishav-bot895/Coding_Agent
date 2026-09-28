@@ -459,3 +459,58 @@ def extract_ast_facts(
         )
 
     return extract_ast_facts_from_source(raw_bytes, filename=target.path)
+
+
+@dataclass(frozen=True)
+class InputRequirement:
+    """Detected standard input requirement in target source code."""
+
+    requires_input: bool
+    prompts: list[str] = field(default_factory=list)
+    has_loop_input: bool = False
+
+
+def detect_input_requirements(source: str | bytes, filename: str = "<target>") -> InputRequirement:
+    """Analyze AST to detect if the code calls input() or reads from sys.stdin."""
+    if isinstance(source, bytes):
+        source_text, _, _ = decode_source(source)
+    else:
+        source_text = source
+    try:
+        tree = ast.parse(source_text, filename=filename)
+    except SyntaxError:
+        return InputRequirement(requires_input=False, prompts=[])
+
+    prompts: list[str] = []
+    has_input = False
+    has_loop_input = False
+
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.For, ast.AsyncFor, ast.While)):
+            for child in ast.walk(node):
+                if isinstance(child, ast.Call):
+                    if isinstance(child.func, ast.Name) and child.func.id == "input":
+                        has_loop_input = True
+                    elif isinstance(child.func, ast.Attribute) and child.func.attr in ("read", "readline", "readlines"):
+                        if isinstance(child.func.value, ast.Attribute) and child.func.value.attr == "stdin":
+                            has_loop_input = True
+                        elif isinstance(child.func.value, ast.Name) and child.func.value.id == "stdin":
+                            has_loop_input = True
+
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name) and node.func.id == "input":
+                has_input = True
+                if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+                    prompts.append(node.args[0].value)
+            elif isinstance(node.func, ast.Attribute) and node.func.attr in ("read", "readline", "readlines"):
+                if isinstance(node.func.value, ast.Attribute) and node.func.value.attr == "stdin":
+                    has_input = True
+                elif isinstance(node.func.value, ast.Name) and node.func.value.id == "stdin":
+                    has_input = True
+
+    return InputRequirement(
+        requires_input=has_input,
+        prompts=prompts,
+        has_loop_input=has_loop_input,
+    )
+

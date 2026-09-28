@@ -285,6 +285,61 @@ BUILTIN_FUNCTION_COSTS: dict[str, OperationCost] = {
         aux_space=ComplexityClassEnum.O_1,
         description="print() writes to output stream in O(1) time.",
     ),
+    "input": OperationCost(
+        time=ComplexityClassEnum.O_1,
+        aux_space=ComplexityClassEnum.O_1,
+        description="input() reads from standard input stream in O(1) time.",
+    ),
+    "repr": OperationCost(
+        time=ComplexityClassEnum.O_1,
+        aux_space=ComplexityClassEnum.O_1,
+        description="repr() returns string representation in O(1) time.",
+    ),
+    "round": OperationCost(
+        time=ComplexityClassEnum.O_1,
+        aux_space=ComplexityClassEnum.O_1,
+        description="round() computes numeric rounding in O(1) time.",
+    ),
+    "pow": OperationCost(
+        time=ComplexityClassEnum.O_1,
+        aux_space=ComplexityClassEnum.O_1,
+        description="pow() computes numeric exponentiation in O(1) time.",
+    ),
+    "divmod": OperationCost(
+        time=ComplexityClassEnum.O_1,
+        aux_space=ComplexityClassEnum.O_1,
+        description="divmod() computes quotient and remainder in O(1) time.",
+    ),
+    "next": OperationCost(
+        time=ComplexityClassEnum.O_1,
+        aux_space=ComplexityClassEnum.O_1,
+        description="next() advances an iterator in O(1) time.",
+    ),
+    "hash": OperationCost(
+        time=ComplexityClassEnum.O_1,
+        aux_space=ComplexityClassEnum.O_1,
+        description="hash() computes object hash value in O(1) time.",
+    ),
+    "bin": OperationCost(
+        time=ComplexityClassEnum.O_1,
+        aux_space=ComplexityClassEnum.O_1,
+        description="bin() converts an integer to a binary string in O(1) time.",
+    ),
+    "oct": OperationCost(
+        time=ComplexityClassEnum.O_1,
+        aux_space=ComplexityClassEnum.O_1,
+        description="oct() converts an integer to an octal string in O(1) time.",
+    ),
+    "hex": OperationCost(
+        time=ComplexityClassEnum.O_1,
+        aux_space=ComplexityClassEnum.O_1,
+        description="hex() converts an integer to a hexadecimal string in O(1) time.",
+    ),
+    "callable": OperationCost(
+        time=ComplexityClassEnum.O_1,
+        aux_space=ComplexityClassEnum.O_1,
+        description="callable() checks if object is callable in O(1) time.",
+    ),
     "any": OperationCost(
         time=ComplexityClassEnum.O_N,
         aux_space=ComplexityClassEnum.O_1,
@@ -988,6 +1043,154 @@ class CostModelAnalyzer:
 
         return None
 
+    def _is_binary_search_or_halving_loop(self, loop: ast.While) -> bool:
+        """Check if while loop represents canonical binary search or logarithmic halving."""
+        # 1. Single-variable halving (e.g. while n > 1: n //= 2 or n = n // 2 or n >>= 1)
+        if isinstance(loop.test, ast.Compare) and len(loop.test.ops) == 1 and len(loop.test.comparators) == 1:
+            cmp = loop.test
+            if isinstance(cmp.left, ast.Name) and isinstance(cmp.ops[0], (ast.Gt, ast.GtE, ast.NotEq)):
+                var_name = cmp.left.id
+                has_halving = False
+                has_non_halving = False
+                for sub in ast.walk(loop):
+                    if isinstance(sub, ast.Assign):
+                        for t in sub.targets:
+                            if isinstance(t, ast.Name) and t.id == var_name:
+                                val = sub.value
+                                if (
+                                    isinstance(val, ast.BinOp)
+                                    and isinstance(val.left, ast.Name)
+                                    and val.left.id == var_name
+                                    and isinstance(val.op, (ast.FloorDiv, ast.Div, ast.RShift))
+                                    and isinstance(val.right, ast.Constant)
+                                    and (
+                                        (isinstance(val.op, (ast.FloorDiv, ast.Div)) and val.right.value == 2)
+                                        or (isinstance(val.op, ast.RShift) and val.right.value == 1)
+                                    )
+                                ):
+                                    has_halving = True
+                                else:
+                                    has_non_halving = True
+                    elif isinstance(sub, ast.AugAssign):
+                        if isinstance(sub.target, ast.Name) and sub.target.id == var_name:
+                            if (
+                                isinstance(sub.op, (ast.FloorDiv, ast.Div, ast.RShift))
+                                and isinstance(sub.value, ast.Constant)
+                                and (
+                                    (isinstance(sub.op, (ast.FloorDiv, ast.Div)) and sub.value.value == 2)
+                                    or (isinstance(sub.op, ast.RShift) and sub.value.value == 1)
+                                )
+                            ):
+                                has_halving = True
+                            else:
+                                has_non_halving = True
+
+                if has_halving and not has_non_halving:
+                    return True
+
+        # 2. Two-pointer binary search interval halving
+        # Condition: left <= right, left < right, right >= left, right > left
+        if not isinstance(loop.test, ast.Compare) or len(loop.test.ops) != 1 or len(loop.test.comparators) != 1:
+            return False
+
+        cmp = loop.test
+        if not (isinstance(cmp.left, ast.Name) and isinstance(cmp.comparators[0], ast.Name)):
+            return False
+
+        p1 = cmp.left.id
+        p2 = cmp.comparators[0].id
+        op = cmp.ops[0]
+
+        if isinstance(op, (ast.Lt, ast.LtE)):
+            left_ptr, right_ptr = p1, p2
+        elif isinstance(op, (ast.Gt, ast.GtE)):
+            left_ptr, right_ptr = p2, p1
+        else:
+            return False
+
+        # Find midpoint calculation: mid = (left + right) // 2 or left + (right - left) // 2 or >> 1
+        midpoint_vars: set[str] = set()
+        for sub in ast.walk(loop):
+            if isinstance(sub, ast.Assign):
+                is_mid = False
+                val = sub.value
+                if isinstance(val, ast.Call) and isinstance(val.func, ast.Name) and val.func.id == "int" and val.args:
+                    val = val.args[0]
+
+                # Pattern A: (left + right) // 2 or (left + right) >> 1
+                if (
+                    isinstance(val, ast.BinOp)
+                    and isinstance(val.op, (ast.FloorDiv, ast.Div, ast.RShift))
+                    and isinstance(val.right, ast.Constant)
+                    and (
+                        (isinstance(val.op, (ast.FloorDiv, ast.Div)) and val.right.value == 2)
+                        or (isinstance(val.op, ast.RShift) and val.right.value == 1)
+                    )
+                ):
+                    numerator = val.left
+                    if isinstance(numerator, ast.BinOp) and isinstance(numerator.op, ast.Add):
+                        terms = {
+                            numerator.left.id if isinstance(numerator.left, ast.Name) else None,
+                            numerator.right.id if isinstance(numerator.right, ast.Name) else None,
+                        }
+                        if left_ptr in terms and right_ptr in terms:
+                            is_mid = True
+
+                # Pattern B: left + (right - left) // 2
+                if (
+                    isinstance(val, ast.BinOp)
+                    and isinstance(val.op, ast.Add)
+                    and isinstance(val.left, ast.Name)
+                    and val.left.id == left_ptr
+                    and isinstance(val.right, ast.BinOp)
+                    and isinstance(val.right.op, (ast.FloorDiv, ast.Div, ast.RShift))
+                    and isinstance(val.right.right, ast.Constant)
+                    and (
+                        (isinstance(val.right.op, (ast.FloorDiv, ast.Div)) and val.right.right.value == 2)
+                        or (isinstance(val.right.op, ast.RShift) and val.right.right.value == 1)
+                    )
+                ):
+                    sub_diff = val.right.left
+                    if (
+                        isinstance(sub_diff, ast.BinOp)
+                        and isinstance(sub_diff.op, ast.Sub)
+                        and isinstance(sub_diff.left, ast.Name)
+                        and sub_diff.left.id == right_ptr
+                        and isinstance(sub_diff.right, ast.Name)
+                        and sub_diff.right.id == left_ptr
+                    ):
+                        is_mid = True
+
+                if is_mid:
+                    for t in sub.targets:
+                        if isinstance(t, ast.Name):
+                            midpoint_vars.add(t.id)
+
+        if not midpoint_vars:
+            return False
+
+        # Verify pointers are updated towards midpoint
+        # e.g. left = mid + 1, right = mid - 1
+        updates_left = False
+        updates_right = False
+
+        for sub in ast.walk(loop):
+            if isinstance(sub, ast.Assign):
+                target_ids = [t.id for t in sub.targets if isinstance(t, ast.Name)]
+                val = sub.value
+
+                refers_to_mid = any(
+                    (isinstance(node, ast.Name) and node.id in midpoint_vars)
+                    for node in ast.walk(val)
+                )
+                if refers_to_mid:
+                    if left_ptr in target_ids:
+                        updates_left = True
+                    if right_ptr in target_ids:
+                        updates_right = True
+
+        return updates_left or updates_right
+
     def _check_dynamic_loops(
         self,
         node: ast.AST,
@@ -998,6 +1201,8 @@ class CostModelAnalyzer:
         """Scan AST for data-dependent while loops or dynamic loop bounds."""
         for sub in ast.walk(node):
             if isinstance(sub, ast.While):
+                if self._is_binary_search_or_halving_loop(sub):
+                    continue
                 loop_line = getattr(sub, "lineno", start_line)
                 # Static constant condition (e.g. while True without break analysis)
                 # or data-dependent condition triggers DYNAMIC_BOUNDS
@@ -1016,37 +1221,38 @@ class CostModelAnalyzer:
 
     def _classify_container_types(
         self,
-        node: ast.FunctionDef | ast.AsyncFunctionDef,
+        node: ast.AST,
     ) -> dict[str, ContainerKind]:
         """Classify collection types based on parameter annotations and local assignments."""
         types: dict[str, ContainerKind] = {}
 
         # 1. Parameter annotations & naming hints
-        for arg in node.args.args:
-            name = arg.arg
-            if name in ("self", "cls"):
-                continue
-            kind = ContainerKind.OTHER
-            if arg.annotation is not None:
-                try:
-                    ann_str = ast.unparse(arg.annotation).lower()
-                except (TypeError, AttributeError, ValueError):
-                    ann_str = ""
-                if "set" in ann_str:
-                    kind = ContainerKind.SET
-                elif "dict" in ann_str or "mapping" in ann_str:
-                    kind = ContainerKind.DICT
-                elif "list" in ann_str or "sequence" in ann_str:
-                    kind = ContainerKind.LIST
-            else:
-                lower_name = name.lower()
-                if "set" in lower_name or lower_name == "seen":
-                    kind = ContainerKind.SET
-                elif "dict" in lower_name or "lookup" in lower_name or "cache" in lower_name:
-                    kind = ContainerKind.DICT
-                elif "list" in lower_name or "items" in lower_name or "arr" in lower_name:
-                    kind = ContainerKind.LIST
-            types[name] = kind
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for arg in node.args.args:
+                name = arg.arg
+                if name in ("self", "cls"):
+                    continue
+                kind = ContainerKind.OTHER
+                if arg.annotation is not None:
+                    try:
+                        ann_str = ast.unparse(arg.annotation).lower()
+                    except (TypeError, AttributeError, ValueError):
+                        ann_str = ""
+                    if "set" in ann_str:
+                        kind = ContainerKind.SET
+                    elif "dict" in ann_str or "mapping" in ann_str:
+                        kind = ContainerKind.DICT
+                    elif "list" in ann_str or "sequence" in ann_str:
+                        kind = ContainerKind.LIST
+                else:
+                    lower_name = name.lower()
+                    if "set" in lower_name or lower_name == "seen":
+                        kind = ContainerKind.SET
+                    elif "dict" in lower_name or "lookup" in lower_name or "cache" in lower_name:
+                        kind = ContainerKind.DICT
+                    elif "list" in lower_name or "items" in lower_name or "arr" in lower_name:
+                        kind = ContainerKind.LIST
+                types[name] = kind
 
         # 2. Local variable assignments
         for sub in ast.walk(node):
@@ -1124,11 +1330,13 @@ class CostModelAnalyzer:
             and all(isinstance(a, ast.Constant) and isinstance(a.value, int) for a in expr.args)
         )
 
-    def _find_outer_loops(self, stmts: list[ast.stmt]) -> list[ast.For]:
+    def _find_outer_loops(self, stmts: list[ast.stmt]) -> list[ast.For | ast.While]:
         """Find top-level sequential loops across control flow statements."""
-        loops: list[ast.For] = []
+        loops: list[ast.For | ast.While] = []
         for stmt in stmts:
             if isinstance(stmt, ast.For):
+                loops.append(stmt)
+            elif isinstance(stmt, ast.While) and self._is_binary_search_or_halving_loop(stmt):
                 loops.append(stmt)
             elif isinstance(stmt, ast.If):
                 loops.extend(self._find_outer_loops(stmt.body))
@@ -1137,11 +1345,13 @@ class CostModelAnalyzer:
                 loops.extend(self._find_outer_loops(stmt.body))
         return loops
 
-    def _find_inner_loops(self, body: list[ast.stmt]) -> list[ast.For]:
+    def _find_inner_loops(self, body: list[ast.stmt]) -> list[ast.For | ast.While]:
         """Find immediate child loops inside a loop body."""
-        inner: list[ast.For] = []
+        inner: list[ast.For | ast.While] = []
         for stmt in body:
             if isinstance(stmt, ast.For):
+                inner.append(stmt)
+            elif isinstance(stmt, ast.While) and self._is_binary_search_or_halving_loop(stmt):
                 inner.append(stmt)
             elif isinstance(stmt, ast.If):
                 inner.extend(self._find_inner_loops(stmt.body))
@@ -1152,7 +1362,7 @@ class CostModelAnalyzer:
 
     def _evaluate_function_costs(
         self,
-        node: ast.FunctionDef | ast.AsyncFunctionDef,
+        node: ast.AST,
         target_str: str,
         start_line: int,
         end_line: int,
@@ -1166,11 +1376,23 @@ class CostModelAnalyzer:
         is_expected = False
         assumptions: list[str] = []
 
-        param_names = [arg.arg for arg in node.args.args if arg.arg not in ("self", "cls")]
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            param_names = [arg.arg for arg in node.args.args if arg.arg not in ("self", "cls")]
+            outer_loops = self._find_outer_loops(node.body)
+        elif isinstance(node, ast.Module):
+            param_names = [
+                t.id
+                for s in ast.walk(node)
+                if isinstance(s, (ast.Assign, ast.AnnAssign))
+                for t in (s.targets if isinstance(s, ast.Assign) else [s.target])
+                if isinstance(t, ast.Name)
+            ]
+            outer_loops = self._find_outer_loops(node.body)
+        else:
+            param_names = []
+            outer_loops = self._find_outer_loops(getattr(node, "body", []))
         container_types = self._classify_container_types(node)
         accumulated_containers: set[str] = set()
-
-        outer_loops = self._find_outer_loops(node.body)
 
         if not outer_loops:
             # Constant-time sequential code without loops
@@ -1211,77 +1433,90 @@ class CostModelAnalyzer:
         else:
             # One or more top-level loops present
             for loop in outer_loops:
-                loop_iter_cost = ComplexityClassEnum.O_N
-                d1 = self._extract_dimension_name(loop.iter)
-
-                if self._is_constant_range(loop.iter):
-                    loop_iter_cost = ComplexityClassEnum.O_1
-                    assumptions.append(f"Constant range loop at line {loop.lineno} runs in O(1) time.")
+                if isinstance(loop, ast.While):
+                    loop_iter_cost = ComplexityClassEnum.O_LOG_N
+                    assumptions.append(
+                        f"Iterative binary search interval halving at line {loop.lineno} runs in O(log n) time."
+                    )
+                    deepest_loop: ast.AST = loop
                 else:
-                    assumptions.append(f"Assumes loop iteration bound at line {loop.lineno} is n.")
+                    loop_iter_cost = ComplexityClassEnum.O_N
+                    d1 = self._extract_dimension_name(loop.iter)
 
-                # Check for nesting depth
-                inners = self._find_inner_loops(loop.body)
-                deepest_loop: ast.For = loop
-
-                if inners:
-                    l2 = inners[0]
-                    deepest_loop = l2
-                    d2 = self._extract_dimension_name(l2.iter)
-                    n2 = ComplexityClassEnum.O_1 if self._is_constant_range(l2.iter) else ComplexityClassEnum.O_N
-
-                    inners_2 = self._find_inner_loops(l2.body)
-                    if inners_2:
-                        l3 = inners_2[0]
-                        deepest_loop = l3
-                        n3 = ComplexityClassEnum.O_1 if self._is_constant_range(l3.iter) else ComplexityClassEnum.O_N
-
-                        inners_3 = self._find_inner_loops(l3.body)
-                        if inners_3:
-                            # 4 or more nested loops exceed closed vocabulary
-                            return create_abstention_report(
-                                target=target_str,
-                                reason=ComplexityAbstentionReason.DYNAMIC_BOUNDS,
-                                details=(
-                                    f"Four nested loops at line {inners_3[0].lineno} exceed "
-                                    "closed vocabulary maximum O(n³)."
-                                ),
-                                start_line=start_line,
-                                end_line=end_line,
-                            )
-
-                        # 3 nested loops
-                        if loop_iter_cost == ComplexityClassEnum.O_N and n2 == ComplexityClassEnum.O_N and n3 == ComplexityClassEnum.O_N:
-                            loop_iter_cost = ComplexityClassEnum.O_N3
-                            assumptions.append(f"Triple nested loop at line {loop.lineno} evaluated as O(n³).")
-                        else:
-                            loop_iter_cost = ComplexityClassEnum.O_N2
+                    if self._is_constant_range(loop.iter):
+                        loop_iter_cost = ComplexityClassEnum.O_1
+                        assumptions.append(f"Constant range loop at line {loop.lineno} runs in O(1) time.")
                     else:
-                        # 2 nested loops
-                        if loop_iter_cost == ComplexityClassEnum.O_1 and n2 == ComplexityClassEnum.O_1:
-                            loop_iter_cost = ComplexityClassEnum.O_1
-                        elif loop_iter_cost == ComplexityClassEnum.O_1:
-                            loop_iter_cost = n2
-                        elif n2 == ComplexityClassEnum.O_1:
-                            pass  # remains O_N
-                        else:
-                            # Both O(n) - check if distinct dimensions
-                            distinct = (
-                                d1 is not None
-                                and d2 is not None
-                                and d1 != d2
-                                and (d1 in param_names and d2 in param_names)
+                        assumptions.append(f"Assumes loop iteration bound at line {loop.lineno} is n.")
+
+                    # Check for nesting depth
+                    inners = self._find_inner_loops(loop.body)
+                    deepest_loop = loop
+
+                    if inners:
+                        l2 = inners[0]
+                        deepest_loop = l2
+                        if isinstance(l2, ast.While):
+                            loop_iter_cost = ComplexityClassEnum.O_N_LOG_N
+                            assumptions.append(
+                                f"Nested binary search loop at line {l2.lineno} yields O(n log n) time."
                             )
-                            if distinct:
-                                loop_iter_cost = ComplexityClassEnum.O_NM
-                                assumptions.append(
-                                    f"Nested loops iterate over distinct dimensions '{d1}' (n) and '{d2}' (m), yielding O(nm)."
-                                )
+                        else:
+                            d2 = self._extract_dimension_name(l2.iter)
+                            n2 = ComplexityClassEnum.O_1 if self._is_constant_range(l2.iter) else ComplexityClassEnum.O_N
+
+                            inners_2 = self._find_inner_loops(l2.body)
+                            if inners_2:
+                                l3 = inners_2[0]
+                                deepest_loop = l3
+                                n3 = ComplexityClassEnum.O_1 if self._is_constant_range(l3.iter) else ComplexityClassEnum.O_N
+
+                                inners_3 = self._find_inner_loops(l3.body)
+                                if inners_3:
+                                    # 4 or more nested loops exceed closed vocabulary
+                                    return create_abstention_report(
+                                        target=target_str,
+                                        reason=ComplexityAbstentionReason.DYNAMIC_BOUNDS,
+                                        details=(
+                                            f"Four nested loops at line {inners_3[0].lineno} exceed "
+                                            "closed vocabulary maximum O(n³)."
+                                        ),
+                                        start_line=start_line,
+                                        end_line=end_line,
+                                    )
+
+                                # 3 nested loops
+                                if loop_iter_cost == ComplexityClassEnum.O_N and n2 == ComplexityClassEnum.O_N and n3 == ComplexityClassEnum.O_N:
+                                    loop_iter_cost = ComplexityClassEnum.O_N3
+                                    assumptions.append(f"Triple nested loop at line {loop.lineno} evaluated as O(n³).")
+                                else:
+                                    loop_iter_cost = ComplexityClassEnum.O_N2
                             else:
-                                loop_iter_cost = ComplexityClassEnum.O_N2
-                                assumptions.append(
-                                    f"Pairwise nested loop at line {l2.lineno} evaluated as O(n²)."
-                                )
+                                # 2 nested loops
+                                if loop_iter_cost == ComplexityClassEnum.O_1 and n2 == ComplexityClassEnum.O_1:
+                                    loop_iter_cost = ComplexityClassEnum.O_1
+                                elif loop_iter_cost == ComplexityClassEnum.O_1:
+                                    loop_iter_cost = n2
+                                elif n2 == ComplexityClassEnum.O_1:
+                                    pass  # remains O_N
+                                else:
+                                    # Both O(n) - check if distinct dimensions
+                                    distinct = (
+                                        d1 is not None
+                                        and d2 is not None
+                                        and d1 != d2
+                                        and (d1 in param_names and d2 in param_names)
+                                    )
+                                    if distinct:
+                                        loop_iter_cost = ComplexityClassEnum.O_NM
+                                        assumptions.append(
+                                            f"Nested loops iterate over distinct dimensions '{d1}' (n) and '{d2}' (m), yielding O(nm)."
+                                        )
+                                    else:
+                                        loop_iter_cost = ComplexityClassEnum.O_N2
+                                        assumptions.append(
+                                            f"Pairwise nested loop at line {l2.lineno} evaluated as O(n²)."
+                                        )
 
                 # Inspect operations inside deepest loop body
                 for sub in ast.walk(deepest_loop):
@@ -1342,7 +1577,10 @@ class CostModelAnalyzer:
                 time_cost = combine_addition(time_cost, loop_iter_cost)
 
             if len(outer_loops) > 1:
-                assumptions.append("Sequential loop addition: O(n) + O(n) = O(n).")
+                if all(isinstance(l, ast.For) and not self._is_constant_range(l.iter) for l in outer_loops):
+                    assumptions.append("Sequential loop addition: O(n) + O(n) = O(n).")
+                else:
+                    assumptions.append(f"Sequential loop addition combines to dominant {time_cost.value} term.")
 
         # -------------------------------------------------------------------------
         # Return & Space Evaluation (Auxiliary vs Output Space)
@@ -1463,20 +1701,47 @@ class CostModelAnalyzer:
         )
 
     def _analyze_module_body(self, stmts: list[ast.stmt]) -> ComplexityReport:
-        """Fallback evaluation for top-level module statements."""
-        return ComplexityReport(
-            target=self.target_name,
-            time_complexity=ComplexityClassEnum.O_1,
-            auxiliary_space=ComplexityClassEnum.O_1,
-            output_space=ComplexityClassEnum.O_1,
-            confidence=ConfidenceEnum.LOW,
-            is_amortized=False,
-            is_expected=False,
-            assumptions=["Top-level module execution evaluated as constant script setup."],
-            abstention_reason=None,
-            details="No function definition specified; evaluated top-level script statements.",
-            start_line=1,
-            end_line=len(self.source_lines) or 1,
+        """Evaluate top-level module statements when no functions are defined."""
+        if not stmts:
+            return ComplexityReport(
+                target=self.target_name,
+                time_complexity=ComplexityClassEnum.O_1,
+                auxiliary_space=ComplexityClassEnum.O_1,
+                output_space=ComplexityClassEnum.O_1,
+                confidence=ConfidenceEnum.HIGH,
+                is_amortized=False,
+                is_expected=False,
+                assumptions=["Empty module evaluated in constant time."],
+                abstention_reason=None,
+                details="Empty module evaluated in O(1) time and space.",
+                start_line=1,
+                end_line=len(self.source_lines) or 1,
+            )
+
+        start_line = 1
+        end_line = len(self.source_lines) or 1
+        target_str = self.target_name
+        module_node = self.tree if self.tree is not None else ast.Module(body=stmts, type_ignores=[])
+
+        # 1. Check for unsupported calls (external dependencies, unknown calls)
+        abstention = self._check_unsupported_calls(
+            module_node, target_str, start_line, end_line, current_func_name=None
+        )
+        if abstention is not None:
+            return abstention
+
+        # 2. Check for dynamic loop bounds (while loops)
+        loop_abstention = self._check_dynamic_loops(module_node, target_str, start_line, end_line)
+        if loop_abstention is not None:
+            return loop_abstention
+
+        # 3. Evaluate iterative structure and operation costs
+        return self._evaluate_function_costs(
+            module_node,
+            target_str,
+            start_line,
+            end_line,
+            is_generator=False,
         )
 
 

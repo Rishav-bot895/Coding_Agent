@@ -9,6 +9,9 @@ selectors, and defines stable exit semantics without tracebacks on user errors.
 from __future__ import annotations
 
 import argparse
+import os
+from pathlib import Path
+import stat
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -75,6 +78,7 @@ class ParsedCliCommand:
     stdin_file: str | None = None
     target_args: list[str] = field(default_factory=list)
     input_file: str | None = None
+    input_data: str | None = None
     keep_session: bool = False
     timeout: float | None = None
     fail_on_job_failure: bool = False
@@ -327,6 +331,12 @@ def create_parser() -> LocaldevArgumentParser:
         help="Path to file supplying stdin for execution.",
     )
     p_debug.add_argument(
+        "-i",
+        "--input",
+        dest="input_data",
+        help="Literal standard input string to feed during execution (supports escaped \\n).",
+    )
+    p_debug.add_argument(
         "--timeout",
         type=float,
         help="Maximum execution duration in seconds before termination.",
@@ -366,6 +376,12 @@ def create_parser() -> LocaldevArgumentParser:
     p_fix.add_argument(
         "--stdin-file",
         help="Path to file supplying stdin for execution.",
+    )
+    p_fix.add_argument(
+        "-i",
+        "--input",
+        dest="input_data",
+        help="Literal standard input string to feed during execution (supports escaped \\n).",
     )
     p_fix.add_argument(
         "--timeout",
@@ -533,6 +549,7 @@ def parse_cli_args(argv: Sequence[str]) -> ParsedCliCommand:
         stdin_file=getattr(args, "stdin_file", None),
         target_args=after_sep,
         input_file=getattr(args, "input_file", None),
+        input_data=getattr(args, "input_data", None),
         keep_session=keep_session_flag,
         timeout=getattr(args, "timeout", None),
         fail_on_job_failure=bool(getattr(args, "fail_on_job_failure", False)),
@@ -543,6 +560,120 @@ def parse_cli_args(argv: Sequence[str]) -> ParsedCliCommand:
         model=effective_model,
         fallback=fallback_flag,
     )
+
+
+def resolve_execution_inputs(
+    target_path: str | Path,
+    input_data: str | None = None,
+    stdin_file: str | Path | None = None,
+) -> tuple[str | None, str | Path | None]:
+    """Inspect target code AST for standard input calls and resolve inputs before execution.
+
+    Precedence:
+    1. Explicit literal string passed via --input / -i. Escaped '\\n' is decoded and trailing newline guaranteed.
+    2. Explicit file path passed via --stdin-file.
+    3. If target code calls input() or reads sys.stdin:
+       a. Non-blocking check for redirected pipe or regular file data.
+       b. If running in interactive terminal (sys.stdin.isatty()):
+          take all inputs from user before execution and feed via stdin_data.
+       c. If non-interactive without input piped:
+          feed empty string to prevent blocking indefinitely on stdin.
+    """
+    if input_data is not None:
+        normalized = input_data.replace("\r\n", "\n").replace("\\r\\n", "\n").replace("\\n", "\n")
+        if not normalized.endswith("\n"):
+            normalized += "\n"
+        return normalized, None
+
+    if stdin_file is not None:
+        return None, stdin_file
+
+    path_obj = Path(target_path)
+    try:
+        source = path_obj.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None, None
+
+    from localdev.languages.python.ast_analyser import detect_input_requirements
+
+    req = detect_input_requirements(source, filename=str(target_path))
+    if not req.requires_input:
+        return None, None
+
+    # Check non-blocking OS stream for piped or redirected input
+    try:
+        fileno = sys.stdin.fileno()
+        mode = os.fstat(fileno).st_mode
+        if stat.S_ISREG(mode) and os.fstat(fileno).st_size > 0:
+            data = sys.stdin.read()
+            if data:
+                return data, None
+        if stat.S_ISFIFO(mode):
+            import ctypes
+            import msvcrt
+
+            handle = msvcrt.get_osfhandle(fileno)
+            avail = ctypes.c_ulong(0)
+            res = ctypes.windll.kernel32.PeekNamedPipe(
+                handle, None, 0, None, ctypes.byref(avail), None
+            )
+            if res and avail.value > 0:
+                data = sys.stdin.read()
+                if data:
+                    return data, None
+    except Exception:
+        try:
+            if hasattr(sys.stdin, "read"):
+                # If sys.stdin is a StringIO or test wrapper with content
+                content = sys.stdin.read()
+                if content:
+                    return content, None
+        except Exception:
+            pass
+
+    # Interactive console input gathering
+    try:
+        is_tty = sys.stdin.isatty()
+    except Exception:
+        is_tty = False
+
+    if is_tty:
+        if not req.has_loop_input and req.prompts:
+            collected: list[str] = []
+            for p in req.prompts:
+                sys.stderr.write(p)
+                sys.stderr.flush()
+                try:
+                    line = sys.stdin.readline()
+                except (EOFError, KeyboardInterrupt):
+                    break
+                if not line:
+                    break
+                collected.append(line.rstrip("\r\n"))
+            return ("\n".join(collected) + "\n", None) if collected else (None, None)
+        else:
+            sys.stderr.write("[localdev] Target requires standard input (calls input() / sys.stdin).\n")
+            if req.prompts:
+                prompt_hints = ", ".join(repr(p) for p in req.prompts)
+                sys.stderr.write(f"[localdev] Detected prompts: {prompt_hints}\n")
+            sys.stderr.write("[localdev] Enter inputs below (finish with an empty line or Ctrl+Z / Ctrl+D):\n")
+            sys.stderr.flush()
+            collected = []
+            while True:
+                try:
+                    line = sys.stdin.readline()
+                except (EOFError, KeyboardInterrupt):
+                    break
+                if not line:
+                    break
+                stripped = line.rstrip("\r\n")
+                if not stripped:
+                    break
+                collected.append(stripped)
+            return ("\n".join(collected) + "\n", None) if collected else (None, None)
+
+    # Non-interactive without piped data: return None so runner does not inject empty input
+    return None, None
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -637,10 +768,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return EXIT_SUCCESS if analysis_report.syntax_valid else EXIT_TARGET_FAILURE
 
             if parsed.command == "debug":
+                stdin_data, stdin_file = resolve_execution_inputs(
+                    target_path=target_record.path,
+                    input_data=parsed.input_data,
+                    stdin_file=parsed.stdin_file,
+                )
                 exec_result = orchestrator.debug(
                     target=target_record,
                     target_args=parsed.target_args,
-                    stdin_file=parsed.stdin_file,
+                    stdin_data=stdin_data,
+                    stdin_file=stdin_file,
                     timeout=parsed.timeout,
                     fail_on_job_failure=parsed.fail_on_job_failure,
                     diagnose=parsed.diagnose,
@@ -682,6 +819,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return EXIT_SUCCESS if is_success else EXIT_TARGET_FAILURE
 
             if parsed.command == "fix":
+                stdin_data, stdin_file = resolve_execution_inputs(
+                    target_path=target_record.path,
+                    input_data=parsed.input_data,
+                    stdin_file=parsed.stdin_file,
+                )
                 fix_report = orchestrator.fix(
                     target=target_record,
                     apply=parsed.apply,
@@ -690,7 +832,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                     expected_stdout_contains=parsed.expected_stdout_contains,
                     expected_exit=parsed.expected_exit,
                     target_args=parsed.target_args,
-                    stdin_file=parsed.stdin_file,
+                    stdin_data=stdin_data,
+                    stdin_file=stdin_file,
                     timeout=parsed.timeout,
                     fail_on_job_failure=parsed.fail_on_job_failure,
                     model=parsed.model,
