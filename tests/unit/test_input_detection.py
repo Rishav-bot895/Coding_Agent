@@ -128,3 +128,54 @@ def test_resolve_execution_inputs_interactive_loop(tmp_path: Path) -> None:
     assert data == "3\n100\n200\n300\n"
     assert f is None
     assert "[localdev] Target requires standard input" in stderr_capture.getvalue()
+
+
+def test_detect_input_with_selector_targeted() -> None:
+    source = """
+def compute_sum(a, b):
+    return a + b
+
+def interactive_func():
+    val = input("Enter something: ")
+    return val
+"""
+    req_compute = detect_input_requirements(source, selector="compute_sum")
+    assert req_compute.requires_input is False
+    assert req_compute.input_count == 0
+
+    req_interactive = detect_input_requirements(source, selector="interactive_func")
+    assert req_interactive.requires_input is True
+    assert req_interactive.input_count == 1
+    assert req_interactive.prompts == ["Enter something: "]
+
+
+def test_detect_input_with_selector_module_level_present() -> None:
+    source = """
+init_val = input("Module setup: ")
+
+def pure_func():
+    return 42
+"""
+    req = detect_input_requirements(source, selector="pure_func")
+    assert req.requires_input is True
+    assert req.input_count == 1
+    assert req.prompts == ["Module setup: "]
+
+
+def test_detect_input_with_class_method_selector() -> None:
+    source = """
+class Calculator:
+    def add(self, a, b):
+        return a + b
+
+    def ask_add(self):
+        val = int(input("Enter number: "))
+        return val + 10
+"""
+    req_pure = detect_input_requirements(source, selector="Calculator.add")
+    assert req_pure.requires_input is False
+
+    req_method = detect_input_requirements(source, selector="Calculator.ask_add")
+    assert req_method.requires_input is True
+    assert req_method.prompts == ["Enter number: "]
+

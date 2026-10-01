@@ -366,6 +366,8 @@ class Orchestrator:
         selector: str,
         *,
         input_file: Path | str | None = None,
+        stdin_data: str | None = None,
+        stdin_file: Path | str | None = None,
         warmup_runs: int | None = None,
         measured_runs: int | None = None,
         timeout: float | None = None,
@@ -383,6 +385,8 @@ class Orchestrator:
             target: Validated TargetRecord.
             selector: Function or method selector string.
             input_file: Optional path to JSON input file.
+            stdin_data: Optional literal string passed as stdin to the worker.
+            stdin_file: Optional file path supplying stdin to the worker.
             warmup_runs: Optional warm-up run count override.
             measured_runs: Optional measured run count override.
             timeout: Subprocess timeout in seconds.
@@ -438,6 +442,8 @@ class Orchestrator:
             target_path=effective_target_path,
             selector=selector,
             input_file=input_file,
+            stdin_data=stdin_data,
+            stdin_file=stdin_file,
             warmup_runs=w_runs,
             measured_runs=m_runs,
             timeout=t_limit,

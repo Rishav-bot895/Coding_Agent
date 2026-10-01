@@ -194,6 +194,8 @@ def load_target_in_worker(
     python_executable: str | Path | None = None,
     fail_on_job_failure: bool = False,
     input_file: Path | str | None = None,
+    stdin_data: str | None = None,
+    stdin_file: Path | str | None = None,
 ) -> TargetLoadResult:
     """Execute a disposable worker subprocess to load target and resolve selector.
 
@@ -204,6 +206,8 @@ def load_target_in_worker(
         python_executable: Python interpreter binary path.
         fail_on_job_failure: Strict mode for Windows Job Object assignment.
         input_file: Optional path to JSON file providing invocation arguments.
+        stdin_data: Optional string payload to supply via standard input.
+        stdin_file: Optional file path to supply via standard input.
 
     Returns:
         TargetLoadResult capturing import metrics and resolution status.
@@ -225,10 +229,14 @@ def load_target_in_worker(
         ]
         if input_file is not None:
             worker_args.extend(["--input", str(Path(input_file).resolve())])
+        if stdin_data is not None or stdin_file is not None:
+            worker_args.append("--has-stdin")
 
         exec_req = build_execution_request(
             target_path=WORKER_SCRIPT_PATH,
             args=worker_args,
+            stdin_data=stdin_data,
+            stdin_file=stdin_file,
             python_executable=python_executable,
         )
 
@@ -329,6 +337,8 @@ def profile_target_in_worker(
     selector: str,
     *,
     input_file: Path | str | None = None,
+    stdin_data: str | None = None,
+    stdin_file: Path | str | None = None,
     warmup_runs: int = DEFAULT_WARMUP_INVOCATIONS,
     measured_runs: int = DEFAULT_MEASURED_INVOCATIONS,
     timeout: float = DEFAULT_TIMEOUT_SECONDS,
@@ -345,6 +355,8 @@ def profile_target_in_worker(
         target_path: Path to Python target file.
         selector: Function or method selector string.
         input_file: Optional path to JSON arguments file.
+        stdin_data: Optional string payload to supply via standard input.
+        stdin_file: Optional file path to supply via standard input.
         warmup_runs: Number of warm-up invocations (default: 2).
         measured_runs: Number of measured invocations (default: 7).
         timeout: Subprocess wall-clock timeout in seconds.
@@ -375,10 +387,14 @@ def profile_target_in_worker(
         ]
         if input_file is not None:
             worker_args.extend(["--input", str(Path(input_file).resolve())])
+        if stdin_data is not None or stdin_file is not None:
+            worker_args.append("--has-stdin")
 
         exec_req = build_execution_request(
             target_path=WORKER_SCRIPT_PATH,
             args=worker_args,
+            stdin_data=stdin_data,
+            stdin_file=stdin_file,
             python_executable=python_executable,
         )
 

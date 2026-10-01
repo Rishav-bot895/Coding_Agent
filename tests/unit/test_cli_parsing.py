@@ -274,9 +274,22 @@ def test_force_flag_prohibited(command: str) -> None:
 
 def test_secondary_flags_parsing() -> None:
     """Secondary data flags are parsed correctly on their designated commands."""
-    # profile --input
+    # profile --input and aliases
     p_prof = parse_cli_args(["profile", "target.py::fn", "--input", "inputs.json"])
     assert p_prof.input_file == "inputs.json"
+
+    p_prof_args = parse_cli_args(["profile", "target.py::fn", "--args", "inputs.json"])
+    assert p_prof_args.input_file == "inputs.json"
+
+    # profile stdin flags
+    p_prof_stdin = parse_cli_args(["profile", "target.py::fn", "-i", "hello"])
+    assert p_prof_stdin.input_data == "hello"
+
+    p_prof_stdin_alias = parse_cli_args(["profile", "target.py::fn", "--stdin", "hello"])
+    assert p_prof_stdin_alias.input_data == "hello"
+
+    p_prof_stdin_file = parse_cli_args(["profile", "target.py::fn", "--stdin-file", "in.txt"])
+    assert p_prof_stdin_file.stdin_file == "in.txt"
 
     # fix --expected-stdout, --expected-stdout-contains, and --expected-exit
     p_fix = parse_cli_args(

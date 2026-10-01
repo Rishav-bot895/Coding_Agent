@@ -435,8 +435,22 @@ def create_parser() -> LocaldevArgumentParser:
     )
     p_profile.add_argument(
         "--input",
+        "--args",
+        "--args-file",
+        "--input-file",
         dest="input_file",
         help="Path to JSON file supplying positional/keyword arguments to function.",
+    )
+    p_profile.add_argument(
+        "--stdin-file",
+        help="Path to file supplying stdin for execution.",
+    )
+    p_profile.add_argument(
+        "-i",
+        "--stdin",
+        "--input-data",
+        dest="input_data",
+        help="Literal standard input string to feed during execution (supports escaped \\n).",
     )
     p_profile.add_argument(
         "--warmup",
@@ -566,11 +580,12 @@ def resolve_execution_inputs(
     target_path: str | Path,
     input_data: str | None = None,
     stdin_file: str | Path | None = None,
+    selector: str | None = None,
 ) -> tuple[str | None, str | Path | None]:
     """Inspect target code AST for standard input calls and resolve inputs before execution.
 
     Precedence:
-    1. Explicit literal string passed via --input / -i. Escaped '\\n' is decoded and trailing newline guaranteed.
+    1. Explicit literal string passed via --input / -i / --stdin. Escaped '\\n' is decoded and trailing newline guaranteed.
     2. Explicit file path passed via --stdin-file.
     3. If target code calls input() or reads sys.stdin:
        a. Non-blocking check for redirected pipe or regular file data.
@@ -596,7 +611,7 @@ def resolve_execution_inputs(
 
     from localdev.languages.python.ast_analyser import detect_input_requirements
 
-    req = detect_input_requirements(source, filename=str(target_path))
+    req = detect_input_requirements(source, filename=str(target_path), selector=selector)
     if not req.requires_input:
         return None, None
 
@@ -638,10 +653,15 @@ def resolve_execution_inputs(
         is_tty = False
 
     if is_tty:
-        if not req.has_loop_input and req.prompts:
+        if not req.has_loop_input and req.input_count > 0:
             collected: list[str] = []
-            for p in req.prompts:
-                sys.stderr.write(p)
+            for i in range(req.input_count):
+                prompt = (
+                    req.prompts[i]
+                    if i < len(req.prompts) and req.prompts[i]
+                    else f"Enter input {i + 1}: "
+                )
+                sys.stderr.write(prompt)
                 sys.stderr.flush()
                 try:
                     line = sys.stdin.readline()
@@ -654,8 +674,10 @@ def resolve_execution_inputs(
         else:
             sys.stderr.write("[localdev] Target requires standard input (calls input() / sys.stdin).\n")
             if req.prompts:
-                prompt_hints = ", ".join(repr(p) for p in req.prompts)
-                sys.stderr.write(f"[localdev] Detected prompts: {prompt_hints}\n")
+                valid_prompts = [p for p in req.prompts if p]
+                if valid_prompts:
+                    prompt_hints = ", ".join(repr(p) for p in valid_prompts)
+                    sys.stderr.write(f"[localdev] Detected prompts: {prompt_hints}\n")
             sys.stderr.write("[localdev] Enter inputs below (finish with an empty line or Ctrl+Z / Ctrl+D):\n")
             sys.stderr.flush()
             collected = []
@@ -672,8 +694,8 @@ def resolve_execution_inputs(
                 collected.append(stripped)
             return ("\n".join(collected) + "\n", None) if collected else (None, None)
 
-    # Non-interactive without piped data: return None so runner does not inject empty input
-    return None, None
+    # Non-interactive without piped data: return empty string so runner does not hang indefinitely on stdin
+    return ("", None)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -934,10 +956,19 @@ def main(argv: Sequence[str] | None = None) -> int:
                         "(e.g. 'script.py::function_name' or 'script.py::Class.method')."
                     )
 
+                stdin_data, stdin_file = resolve_execution_inputs(
+                    target_path=target_record.path,
+                    input_data=parsed.input_data,
+                    stdin_file=parsed.stdin_file,
+                    selector=parsed.selector,
+                )
+
                 profile_report = orchestrator.profile(
                     target=target_record,
                     selector=parsed.selector,
                     input_file=parsed.input_file,
+                    stdin_data=stdin_data,
+                    stdin_file=stdin_file,
                     warmup_runs=parsed.warmup,
                     measured_runs=parsed.measured,
                     timeout=parsed.timeout,

@@ -468,10 +468,23 @@ class InputRequirement:
     requires_input: bool
     prompts: list[str] = field(default_factory=list)
     has_loop_input: bool = False
+    input_count: int = 0
 
 
-def detect_input_requirements(source: str | bytes, filename: str = "<target>") -> InputRequirement:
-    """Analyze AST to detect if the code calls input() or reads from sys.stdin."""
+def detect_input_requirements(
+    source: str | bytes,
+    filename: str = "<target>",
+    selector: str | None = None,
+) -> InputRequirement:
+    """Analyze AST to detect if the code calls input() or reads from sys.stdin.
+
+    Args:
+        source: Python source code as string or bytes.
+        filename: Optional filename for error reporting.
+        selector: Optional function or method selector (e.g. 'func' or 'Class.method').
+            When provided, only top-level statements (executed during import) and the
+            targeted function/method are inspected.
+    """
     if isinstance(source, bytes):
         source_text, _, _ = decode_source(source)
     else:
@@ -479,38 +492,91 @@ def detect_input_requirements(source: str | bytes, filename: str = "<target>") -
     try:
         tree = ast.parse(source_text, filename=filename)
     except SyntaxError:
-        return InputRequirement(requires_input=False, prompts=[])
+        return InputRequirement(requires_input=False, prompts=[], input_count=0)
+
+    nodes_to_inspect: list[ast.AST] = []
+    if selector:
+        # Include module-level statements executed on import
+        for node in tree.body:
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                nodes_to_inspect.append(node)
+
+        # Include statements within the targeted function or method
+        if "." in selector:
+            cls_name, meth_name = selector.split(".", 1)
+            for node in tree.body:
+                if isinstance(node, ast.ClassDef) and node.name == cls_name:
+                    for child in node.body:
+                        if (
+                            isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+                            and child.name == meth_name
+                        ):
+                            nodes_to_inspect.append(child)
+        else:
+            for node in tree.body:
+                if (
+                    isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and node.name == selector
+                ):
+                    nodes_to_inspect.append(node)
+    else:
+        nodes_to_inspect = [tree]
 
     prompts: list[str] = []
     has_input = False
     has_loop_input = False
+    input_count = 0
 
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.For, ast.AsyncFor, ast.While)):
-            for child in ast.walk(node):
-                if isinstance(child, ast.Call):
-                    if isinstance(child.func, ast.Name) and child.func.id == "input":
-                        has_loop_input = True
-                    elif isinstance(child.func, ast.Attribute) and child.func.attr in ("read", "readline", "readlines"):
-                        if isinstance(child.func.value, ast.Attribute) and child.func.value.attr == "stdin":
+    for root_node in nodes_to_inspect:
+        for node in ast.walk(root_node):
+            if isinstance(node, (ast.For, ast.AsyncFor, ast.While)):
+                for child in ast.walk(node):
+                    if isinstance(child, ast.Call):
+                        if isinstance(child.func, ast.Name) and child.func.id == "input":
                             has_loop_input = True
-                        elif isinstance(child.func.value, ast.Name) and child.func.value.id == "stdin":
-                            has_loop_input = True
+                        elif (
+                            isinstance(child.func, ast.Attribute)
+                            and child.func.attr in ("read", "readline", "readlines")
+                        ):
+                            if (
+                                isinstance(child.func.value, ast.Attribute)
+                                and child.func.value.attr == "stdin"
+                            ):
+                                has_loop_input = True
+                            elif (
+                                isinstance(child.func.value, ast.Name)
+                                and child.func.value.id == "stdin"
+                            ):
+                                has_loop_input = True
 
-        if isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Name) and node.func.id == "input":
-                has_input = True
-                if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
-                    prompts.append(node.args[0].value)
-            elif isinstance(node.func, ast.Attribute) and node.func.attr in ("read", "readline", "readlines"):
-                if isinstance(node.func.value, ast.Attribute) and node.func.value.attr == "stdin":
+            if isinstance(node, ast.Call):
+                if isinstance(node.func, ast.Name) and node.func.id == "input":
                     has_input = True
-                elif isinstance(node.func.value, ast.Name) and node.func.value.id == "stdin":
-                    has_input = True
+                    input_count += 1
+                    if (
+                        node.args
+                        and isinstance(node.args[0], ast.Constant)
+                        and isinstance(node.args[0].value, str)
+                    ):
+                        prompts.append(node.args[0].value)
+                elif (
+                    isinstance(node.func, ast.Attribute)
+                    and node.func.attr in ("read", "readline", "readlines")
+                ):
+                    if (
+                        isinstance(node.func.value, ast.Attribute)
+                        and node.func.value.attr == "stdin"
+                    ) or (
+                        isinstance(node.func.value, ast.Name)
+                        and node.func.value.id == "stdin"
+                    ):
+                        has_input = True
+                        input_count += 1
 
     return InputRequirement(
         requires_input=has_input,
         prompts=prompts,
         has_loop_input=has_loop_input,
+        input_count=input_count,
     )
 

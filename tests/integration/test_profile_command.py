@@ -339,3 +339,93 @@ def test_profile_command_process_tree_cleanup() -> None:
     new_lingering_children = final_children - initial_children
 
     assert not new_lingering_children, f"Lingering worker processes detected: {new_lingering_children}"
+
+
+# =============================================================================
+# Profile User Input Tests
+# =============================================================================
+
+
+def test_profile_command_with_stdin_literal_flag(tmp_path: Path) -> None:
+    """Verify profile command successfully executes code reading input() with -i literal flag."""
+    target_file = tmp_path / "interactive_target.py"
+    target_file.write_text(
+        "def read_and_add():\n"
+        "    val = int(input('Enter value: '))\n"
+        "    return val + 10\n",
+        encoding="utf-8",
+    )
+    target = f"{target_file}::read_and_add"
+    exit_code, stdout, stderr = run_cli(["profile", target, "-i", "42", "--warmup", "1", "--measured", "2"])
+
+    assert exit_code == EXIT_SUCCESS, f"Stderr: {stderr}"
+    assert "Latency" in stdout or "Report" in stdout or "Profile" in stdout
+
+
+def test_profile_command_with_stdin_alias_flag(tmp_path: Path) -> None:
+    """Verify profile command accepts --stdin flag."""
+    target_file = tmp_path / "interactive_target.py"
+    target_file.write_text(
+        "def read_and_multiply():\n"
+        "    a = int(input())\n"
+        "    b = int(input())\n"
+        "    return a * b\n",
+        encoding="utf-8",
+    )
+    target = f"{target_file}::read_and_multiply"
+    exit_code, stdout, stderr = run_cli(["profile", target, "--stdin", "6\\n7", "--warmup", "1", "--measured", "2"])
+
+    assert exit_code == EXIT_SUCCESS, f"Stderr: {stderr}"
+
+
+def test_profile_command_with_stdin_file_flag(tmp_path: Path) -> None:
+    """Verify profile command accepts --stdin-file flag."""
+    target_file = tmp_path / "interactive_target.py"
+    target_file.write_text(
+        "import sys\n"
+        "def read_data():\n"
+        "    return sys.stdin.read().strip()\n",
+        encoding="utf-8",
+    )
+    data_file = tmp_path / "input.txt"
+    data_file.write_text("benchmark_payload", encoding="utf-8")
+
+    target = f"{target_file}::read_data"
+    exit_code, stdout, stderr = run_cli(["profile", target, "--stdin-file", str(data_file), "--warmup", "1", "--measured", "2"])
+
+    assert exit_code == EXIT_SUCCESS, f"Stderr: {stderr}"
+
+
+def test_profile_command_with_json_payload_stdin(tmp_path: Path) -> None:
+    """Verify profile command accepts stdin provided within JSON input file."""
+    target_file = tmp_path / "interactive_target.py"
+    target_file.write_text(
+        "def greet_user():\n"
+        "    name = input('Name: ')\n"
+        "    return f'Hello {name}'\n",
+        encoding="utf-8",
+    )
+    input_file = tmp_path / "input.json"
+    input_file.write_text(json.dumps({"args": [], "kwargs": {}, "stdin": "Antigravity\n"}), encoding="utf-8")
+
+    target = f"{target_file}::greet_user"
+    exit_code, stdout, stderr = run_cli(["profile", target, "--input", str(input_file), "--warmup", "1", "--measured", "2"])
+
+    assert exit_code == EXIT_SUCCESS, f"Stderr: {stderr}"
+
+
+def test_profile_command_with_module_level_and_function_inputs(tmp_path: Path) -> None:
+    """Verify profile handles both import-time module inputs and per-run function inputs."""
+    target_file = tmp_path / "interactive_target.py"
+    target_file.write_text(
+        "module_val = input()\n"
+        "def add_vals():\n"
+        "    func_val = input()\n"
+        "    return module_val + func_val\n",
+        encoding="utf-8",
+    )
+    target = f"{target_file}::add_vals"
+    exit_code, stdout, stderr = run_cli(["profile", target, "-i", "mod\\nfunc\\n", "--warmup", "1", "--measured", "2"])
+
+    assert exit_code == EXIT_SUCCESS, f"Stderr: {stderr}"
+

@@ -72,6 +72,11 @@ def create_worker_parser() -> argparse.ArgumentParser:
         help="Number of measured invocations to record.",
     )
     parser.add_argument(
+        "--has-stdin",
+        action="store_true",
+        help="Whether standard input stream was supplied to worker process.",
+    )
+    parser.add_argument(
         "--response-file",
         help="Path to file where structured JSON response will be written.",
     )
@@ -169,12 +174,29 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     # Step 4: Hot-process benchmark execution (if mode == "profile" and resolution succeeded)
     if args.mode == "profile" and result["success"] and callable_obj is not None:
+        remaining_stdin: str | None = None
+        if args.has_stdin:
+            try:
+                if not sys.stdin.closed:
+                    data = sys.stdin.read()
+                    if data:
+                        remaining_stdin = data
+            except Exception:
+                remaining_stdin = None
+
+        invocation_stdin = (
+            input_mgr.stdin
+            if input_mgr.stdin is not None
+            else remaining_stdin
+        )
+
         try:
             bench_res = run_benchmark(
                 target_callable=callable_obj,
                 input_manager=input_mgr,
                 warmup_runs=args.warmup,
                 measured_runs=args.measured,
+                invocation_stdin=invocation_stdin,
             )
             result["warmup_runs"] = bench_res.warmup_runs
             result["measured_runs"] = bench_res.measured_runs

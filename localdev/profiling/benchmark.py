@@ -8,7 +8,9 @@ contamination.
 from __future__ import annotations
 
 import copy
+import io
 import json
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Final
@@ -68,6 +70,10 @@ class ProfileInput(BaseModel):
         default_factory=dict,
         description="Keyword arguments passed to the target function.",
     )
+    stdin: str | None = Field(
+        default=None,
+        description="Standard input data provided to the function during invocation.",
+    )
 
     @field_validator("kwargs")
     @classmethod
@@ -79,6 +85,18 @@ class ProfileInput(BaseModel):
                     f"Invalid keyword argument '{k}': must be a valid Python identifier."
                 )
         return v
+
+
+class InvocationStdin(io.StringIO):
+    """In-memory text stream with a binary .buffer attribute for repeated benchmark invocations."""
+
+    def __init__(self, initial_value: str = "") -> None:
+        super().__init__(initial_value)
+        self._buffer = io.BytesIO(initial_value.encode("utf-8"))
+
+    @property
+    def buffer(self) -> io.BytesIO:
+        return self._buffer
 
 
 class ProfileInputManager:
@@ -185,6 +203,11 @@ class ProfileInputManager:
         return copy.deepcopy(self._input_model.kwargs)
 
     @property
+    def stdin(self) -> str | None:
+        """Return the optional standard input data."""
+        return self._input_model.stdin
+
+    @property
     def raw_json(self) -> str:
         """Return the raw JSON string."""
         return self._raw_json_str
@@ -248,6 +271,7 @@ def run_benchmark(
     input_manager: ProfileInputManager,
     warmup_runs: int = DEFAULT_WARMUP_INVOCATIONS,
     measured_runs: int = DEFAULT_MEASURED_INVOCATIONS,
+    invocation_stdin: str | None = None,
 ) -> BenchmarkResult:
     """Execute warm-up and measured invocations under hot-process semantics.
 
@@ -259,6 +283,7 @@ def run_benchmark(
         input_manager: ProfileInputManager providing deep-recreated arguments.
         warmup_runs: Number of unmeasured warm-up invocations (default: 2).
         measured_runs: Number of measured invocations (default: 7, must be >= 1).
+        invocation_stdin: Optional standard input string reset before every invocation.
 
     Returns:
         BenchmarkResult with computed dispersion statistics and notes.
@@ -272,12 +297,21 @@ def run_benchmark(
     if measured_runs < 1:
         raise ValueError(f"measured_runs must be at least 1: {measured_runs}")
 
+    effective_stdin = (
+        invocation_stdin
+        if invocation_stdin is not None
+        else input_manager.stdin
+    )
+
     warmup_durations: list[int] = []
     warmup_allocations: list[int] = []
 
     # Warm-up phase
     for i in range(warmup_runs):
         fresh_args, fresh_kwargs = input_manager.recreate_arguments()
+        orig_stdin = sys.stdin
+        if effective_stdin is not None:
+            sys.stdin = InvocationStdin(effective_stdin)
         timer = InvocationTimer()
         tracker = TracemallocTracker()
         try:
@@ -290,6 +324,8 @@ def run_benchmark(
                 invocation_index=i,
                 is_warmup=True,
             ) from exc
+        finally:
+            sys.stdin = orig_stdin
 
         warmup_durations.append(timer.duration_ns)
         warmup_allocations.append(tracker.result().python_allocations_tracemalloc_bytes)
@@ -300,6 +336,9 @@ def run_benchmark(
 
     for i in range(measured_runs):
         fresh_args, fresh_kwargs = input_manager.recreate_arguments()
+        orig_stdin = sys.stdin
+        if effective_stdin is not None:
+            sys.stdin = InvocationStdin(effective_stdin)
         timer = InvocationTimer()
         tracker = TracemallocTracker()
         try:
@@ -312,6 +351,8 @@ def run_benchmark(
                 invocation_index=i,
                 is_warmup=False,
             ) from exc
+        finally:
+            sys.stdin = orig_stdin
 
         mem_res = tracker.result()
         measured_durations.append(timer.duration_ns)

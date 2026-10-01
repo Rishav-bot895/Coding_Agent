@@ -52,16 +52,23 @@ def test_debug_with_long_input_flag(tmp_path: Path) -> None:
     assert "Hello, Alice!" in env["data"]["stdout"]
 
 
-def test_debug_demo_test1_with_input() -> None:
-    """Verify demo/test1.py runs without timeout when input is supplied."""
-    demo_script = Path("demo/test1.py")
-    if not demo_script.is_file():
-        return
+def test_debug_demo_test1_with_input(tmp_path: Path) -> None:
+    """Verify script with while loop and input runs without timeout when input is supplied."""
+    script = tmp_path / "test1_sample.py"
+    script.write_text(
+        "n = int(input())\n"
+        "count = 0\n"
+        "while n > 1:\n"
+        "    n = n // 2\n"
+        "    count += 1\n"
+        "print('Iterations:', count)\n",
+        encoding="utf-8",
+    )
 
     stdout = io.StringIO()
     stderr = io.StringIO()
     with redirect_stdout(stdout), redirect_stderr(stderr):
-        code = main(["debug", str(demo_script), "-i", "16", "--json"])
+        code = main(["debug", str(script), "-i", "16", "--json"])
 
     assert code == EXIT_SUCCESS
     env = json.loads(stdout.getvalue())
