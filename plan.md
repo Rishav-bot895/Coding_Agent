@@ -249,6 +249,7 @@ python -m mypy --strict localdev
 | 10 | Static time, auxiliary-space, and output-space analysis with mandatory abstention | Phase 4 |
 | 11 | Function profiling (hot-process semantics, direct file loading, separated memory metrics) | Phase 5, Phase 6, Phase 10 selectors |
 | 12 | Evaluation, 8 GB budget optimization, documentation, and structured release demo | All prior phases |
+| 13 | Domain-specific SLM fine-tuning with QLoRA, GGUF quantization, and Ollama integration | Phase 1, Phase 7, Phase 8, Phase 12 |
 
 ---
 
@@ -1499,6 +1500,112 @@ python -m mypy --strict localdev
 
 ---
 
+# Phase 13 — Domain-Specific SLM Fine-Tuning with QLoRA
+
+## P13-T1 — Curation and validation of instruction-tuning datasets
+
+**Status:** planned
+
+**Definition:** Build an automated dataset generation, validation, and token-filtering pipeline to create high-quality instruction-tuning pairs for evidence-grounded diagnosis (`DiagnosisRecord`), surgical edit proposals (`EditProposal`), and sound technical abstentions (`DiagnosisAbstention`).
+
+**Files:** `tools/finetune/prepare_dataset.py`, `tools/finetune/schema_templates.py`, `datasets/finetune/manifest.json`, `docs/finetuning.md`.
+
+**In scope:**
+- Standardized prompt formatting mirroring `ContextBuilder` (`to_messages()`), encoding system prompts, target source context, AST facts, isolated Ruff diagnostics, and runtime traceback evidence.
+- Target completions formatted strictly as raw, valid JSON matching `DiagnosisRecord` and `EditProposal` schemas (no markdown code blocks, no preamble, 100% Pydantic parseable).
+- Synthetic dataset generation and bootstrapping from known Python bug corpora (e.g., PyTraceBugs, Defects4J Python subsets, synthetic syntax/runtime errors) and clean/unsupported cases for sound abstention training (`DiagnosisAbstention`).
+- Strict token length verification: Enforce prompt length <= 1,200 tokens and target completion <= 600 tokens using the Qwen2.5 tokenizer, strictly respecting the 2,048-token context window.
+- Multi-stage dataset validation: JSON schema compliance, 1-based inclusive edit applicability, exact matching of `expected_text` against source lines, evidence ID grounding check (rejecting pairs where diagnosis references non-existent evidence IDs), and train/val/test splits (80/10/10).
+
+**Not in scope:** Multi-file repair pairs; conversational or ungrounded instruction pairs.
+
+**Testing:**
+- Automated unit tests validating all curated samples against Pydantic models.
+- Token budget assertions ensuring zero samples breach the 2,048-token context window.
+- Distribution checks across exception types, syntax errors, logic bugs, and abstentions.
+
+**Acceptance:** A curated, validated, schema-compliant dataset of at least 3,000 high-quality training pairs is generated with deterministic verification.
+
+## P13-T2 — QLoRA training pipeline and reproducible recipe
+
+**Status:** planned
+
+**Definition:** Implement a reproducible, scriptable QLoRA training pipeline using PyTorch, Hugging Face `transformers`, `peft`, and `bitsandbytes` (or `unsloth`) to fine-tune `Qwen/Qwen2.5-Coder-3B-Instruct` (and `1.5B-Instruct`) on consumer GPU hardware.
+
+**Files:** `tools/finetune/train_qlora.py`, `tools/finetune/config.py`, `tools/finetune/requirements.txt`, `docs/finetuning.md`.
+
+**In scope:**
+- 4-bit NormalFloat (NF4) base model quantization with double quantization (`bnb_4bit_use_double_quant=True`) and compute dtype `bfloat16` (or `float16`).
+- LoRA configuration targeting all linear projection layers (`q_proj`, `k_proj`, `v_proj`, `o_proj`, `gate_proj`, `up_proj`, `down_proj`) with rank $r=32$, $\alpha=64$, and dropout $0.05$.
+- Training hyperparameters: Cosine learning rate scheduler with warm-up (peak LR $2 \times 10^{-4}$), effective batch size 16 (via gradient accumulation), gradient checkpointing enabled to fit within consumer VRAM (under 8–12 GB).
+- Loss masking: Compute cross-entropy loss exclusively on completion tokens (`DiagnosisRecord` / `EditProposal` JSON payload), masking prompt tokens (`labels = -100`).
+- Checkpointing, logging, and evaluation metrics: Track validation loss, schema parse rate on held-out validation set, and gradient norm stability.
+
+**Not in scope:** Full-parameter fine-tuning; multi-node distributed training; cloud proprietary APIs.
+
+**Testing:**
+- Smoke test training run on a mini-batch verifying loss convergence and gradient calculation.
+- Checkpoint integrity test ensuring LoRA adapter weights save and reload cleanly.
+- VRAM consumption benchmark verifying peak memory stays under configured threshold.
+
+**Acceptance:** The QLoRA training script executes end-to-end and outputs trained LoRA adapter weights with measurable loss reduction on the validation split.
+
+## P13-T3 — LoRA fusion, GGUF quantization, and local Ollama packaging
+
+**Status:** planned
+
+**Definition:** Build an automated pipeline to merge trained LoRA adapter weights into the 16-bit base model, quantize the fused model to 4-bit GGUF (`q4_K_M`), configure an Ollama `Modelfile`, and register the fine-tuned model directly into the local Ollama daemon.
+
+**Files:** `tools/finetune/export_gguf.py`, `tools/finetune/Modelfile.template`, `tools/finetune/register_ollama.py`, `docs/finetuning.md`.
+
+**In scope:**
+- Adapter fusion: Merge LoRA weights into FP16 base model weights using `peft.PeftModel.merge_and_unload()`.
+- GGUF conversion: Convert the fused HF model to GGUF format using `llama.cpp` conversion utilities (`convert_hf_to_gguf.py`).
+- Quantization: Quantize GGUF to `q4_K_M` (and optionally `q5_K_M` / `q8_0` for evaluation) to minimize memory and latency on Windows 11 x64.
+- Ollama `Modelfile` generation:
+  - Base: `FROM ./localdev-qwen2.5-coder-3b-q4_K_M.gguf`
+  - Template: ChatML prompt template matching Qwen2.5-Coder.
+  - Parameters: `PARAMETER temperature 0.2`, `PARAMETER top_p 0.95`, `PARAMETER num_ctx 2048`, `PARAMETER stop "<|im_end|>"`
+- Automated registration via `ollama create localdev-qwen-coder:3b -f Modelfile`.
+- Verification of local availability via `OllamaClient.list_models()`.
+
+**Not in scope:** Hosting remote model weights on external registries; proprietary quantized formats.
+
+**Testing:**
+- Automated script verifying GGUF file integrity and quantization accuracy.
+- Ollama registration test verifying model shows in `ollama list` and responds on `/api/tags`.
+- Inference smoke test verifying structured generation via `OllamaClient`.
+
+**Acceptance:** Fine-tuned model is compiled to a quantized GGUF file, registered in local Ollama, and callable via `localdev`'s standard inference client.
+
+## P13-T4 — Fine-tuned model evaluation, regression benchmarking, and documentation
+
+**Status:** planned
+
+**Definition:** Benchmark the fine-tuned model against the original off-the-shelf Qwen2.5-Coder models using `localdev`'s evaluation harness (`tools/evaluate.py`), measuring schema accuracy, edit precision, evidence grounding, latency, and memory lifecycle.
+
+**Files:** `tools/evaluate.py`, `docs/evaluation.md`, `docs/finetuning.md`.
+
+**In scope:**
+- Head-to-head comparison on `tests/bug_samples/` between off-the-shelf `qwen2.5-coder:3b-instruct-q4_K_M` and fine-tuned `localdev-qwen-coder:3b-q4_K_M`.
+- Metric 1: **First-attempt JSON schema validity rate** (reducing automated retries toward 0%).
+- Metric 2: **Edit proposal precision** (reduction in diff size, adherence to 1-based indexing, valid `expected_text` match rate).
+- Metric 3: **Patch pass rates** across Level A (syntax), Level B (exception eliminated), Level C (exit 0), and Level D (behavioral oracle).
+- Metric 4: **Hallucinated evidence rate** (percentage of diagnosis outputs referencing invalid evidence IDs, target: 0.0%).
+- Metric 5: **Inference latency and memory footprint** on the 8 GB / 16 GB Windows 11 target machine, verifying `keep_alive: 0` model unloading.
+- Complete documentation in `docs/finetuning.md` detailing dataset creation, QLoRA hyperparameters, quantization steps, reproduction instructions, and evaluation scorecards.
+
+**Not in scope:** Modifying deterministic validation invariants (Levels A–D) to fit model quirks.
+
+**Testing:**
+- Run `tools/evaluate.py` across all bug suites with the fine-tuned model.
+- Assert zero regressions on deterministic syntax parsing and runtime containment.
+- Verify evaluation runs fully offline without external network calls.
+
+**Acceptance:** The fine-tuned model demonstrates statistically significant improvements in first-attempt schema compliance, patch synthesis accuracy, and evidence grounding compared to the base model, fully documented in `docs/finetuning.md`.
+
+---
+
 ## 7. Cross-cutting test matrix
 
 | Area | Required test cases |
@@ -1516,6 +1623,7 @@ python -m mypy --strict localdev
 | **Function Profiling** | Function and class method selectors, direct file-based loading in disposable worker (`importlib.util.spec_from_file_location`), separate measurement of all 5 metrics: import-time cost (duration, stdout, stderr), function timing (warm-up, median, dispersion), peak tracemalloc-tracked Python memory allocations, worker process RSS, and hot-process semantics (single module load, persistent module/global state) versus fresh-process startup benchmarking. |
 | **Sanitization & Reporting** | Terminal output sanitization stripping ANSI escape sequences, CSI/OSC control codes, and dangerous control characters; JSON output raw data preservation; console Unicode fallback. |
 | **Session Cleanup** | Explicit 5-stage cleanup sequence: 1. stop/terminate processes → 2. close pipes/handles → 3. wait for process termination → 4. close job/process handles → 5. delete session directory and same-volume staging; prevention of Windows sharing violations (`ERROR_SHARING_VIOLATION`); retention with `--keep-session`. |
+| **Model Fine-Tuning & QLoRA** | Dataset JSON Schema adherence, token length limits (<= 1,200 prompt, <= 600 completion), exact `expected_text` match in training pairs, LoRA weight fusion integrity, GGUF conversion validity, `Modelfile` parameter verification, offline Ollama registration, head-to-head regression testing against base model. |
 
 ---
 
@@ -1595,6 +1703,8 @@ If schedule pressure requires reducing the MVP, defer work strictly in this orde
 | **Profiling state mutation** | Inconsistent repeated timings | Hot-process semantics explicitly documented; deep reconstruction of fresh arguments from JSON for every invocation (P11-T2, P11-T3). |
 | **Unsound complexity claims** | False algorithmic guarantees | `Conservative + assumption-linked + source-linked + abstention-first` contract based on CPython runtime semantics; explicitly differentiate amortized and expected/average complexities; restricted to closed vocabulary (`O(1)` through `O(2^n)`); mandatory abstention on unknown calls or dynamic bounds (P10-T1, P10-T2, P10-T3). |
 | **User assumes security sandbox** | Security vulnerability from hostile code | Prominent warnings in CLI, README, and docs: personal portfolio project for user-owned/trusted code only; Job Objects are operational limits, not a security sandbox (P1-T1, P12-T4). |
+| **LoRA catastrophic forgetting / formatting drift** | Loss of Python reasoning / invalid JSON | Mask prompt tokens (`labels = -100`); mix general Python repair pairs with strict schema targets; evaluate validation loss and schema parse rate on held-out test set (P13-T1, P13-T2). |
+| **Quantization degradation in GGUF** | Accuracy drop from FP16 to 4-bit | Use `q4_K_M` medium quantization; benchmark GGUF against FP16 HF checkpoints prior to Ollama registration (P13-T3, P13-T4). |
 
 ---
 
