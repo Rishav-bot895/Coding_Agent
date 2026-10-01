@@ -32,3 +32,5 @@ session_*
 *.swp
 
 demo/
+
+Commands.md
