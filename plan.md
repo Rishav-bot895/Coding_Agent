@@ -1504,7 +1504,7 @@ python -m mypy --strict localdev
 
 ## P13-T1 — Curation and validation of instruction-tuning datasets
 
-**Status:** planned
+**Status:** completed
 
 **Definition:** Build an automated dataset generation, validation, and token-filtering pipeline to create high-quality instruction-tuning pairs for evidence-grounded diagnosis (`DiagnosisRecord`), surgical edit proposals (`EditProposal`), and sound technical abstentions (`DiagnosisAbstention`).
 
@@ -1528,7 +1528,7 @@ python -m mypy --strict localdev
 
 ## P13-T2 — QLoRA training pipeline and reproducible recipe
 
-**Status:** planned
+**Status:** completed
 
 **Definition:** Implement a reproducible, scriptable QLoRA training pipeline using PyTorch, Hugging Face `transformers`, `peft`, and `bitsandbytes` (or `unsloth`) to fine-tune `Qwen/Qwen2.5-Coder-3B-Instruct` (and `1.5B-Instruct`) on consumer GPU hardware.
 
@@ -1556,44 +1556,57 @@ python -m mypy --strict localdev
 
 **Definition:** Build an automated pipeline to merge trained LoRA adapter weights into the 16-bit base model, quantize the fused model to 4-bit GGUF (`q4_K_M`), configure an Ollama `Modelfile`, and register the fine-tuned model directly into the local Ollama daemon.
 
-**Files:** `tools/finetune/export_gguf.py`, `tools/finetune/Modelfile.template`, `tools/finetune/register_ollama.py`, `docs/finetuning.md`.
+**Files:** `tools/finetune/export_gguf.py`, `tools/finetune/Modelfile.template`, `tools/finetune/register_ollama.py`, `models/finetune/Modelfile`, `.gitignore`, `docs/finetuning.md`.
 
 **In scope:**
-- Adapter fusion: Merge LoRA weights into FP16 base model weights using `peft.PeftModel.merge_and_unload()`.
-- GGUF conversion: Convert the fused HF model to GGUF format using `llama.cpp` conversion utilities (`convert_hf_to_gguf.py`).
-- Quantization: Quantize GGUF to `q4_K_M` (and optionally `q5_K_M` / `q8_0` for evaluation) to minimize memory and latency on Windows 11 x64.
-- Ollama `Modelfile` generation:
-  - Base: `FROM ./localdev-qwen2.5-coder-3b-q4_K_M.gguf`
-  - Template: ChatML prompt template matching Qwen2.5-Coder.
-  - Parameters: `PARAMETER temperature 0.2`, `PARAMETER top_p 0.95`, `PARAMETER num_ctx 2048`, `PARAMETER stop "<|im_end|>"`
-- Automated registration via `ollama create localdev-qwen-coder:3b -f Modelfile`.
-- Verification of local availability via `OllamaClient.list_models()`.
+- **Strict Project-Local Storage Boundary:** All fine-tuned models, merged intermediate weights, quantized GGUF binaries, and Modelfiles must be stored **exclusively within the project directory** under `models/finetune/`:
+  - LoRA Adapter Checkpoint: `models/finetune/qlora_adapter/` (and `models/finetune/smoke_test_adapter/`).
+  - Fused 16-Bit Hugging Face Model: `models/finetune/fused/` (contains `model.safetensors`, `config.json`, tokenizer files).
+  - Quantized GGUF Binaries: `models/finetune/gguf/` (e.g., `models/finetune/gguf/localdev-qwen2.5-coder-3b-q4_K_M.gguf`, `models/finetune/gguf/localdev-qwen2.5-coder-1.5b-q4_K_M.gguf`).
+  - Ollama Modelfile: `models/finetune/Modelfile` (configured with relative path `FROM ./models/finetune/gguf/localdev-qwen2.5-coder-3b-q4_K_M.gguf`).
+- **Gitignore Protection Policy:**
+  - All large binary model weights (`*.safetensors`, `*.bin`, `*.gguf`, `*.pt`, `*.pth`, `models/finetune/fused/`, `models/finetune/gguf/`, `models/finetune/qlora_adapter/`, `models/finetune/smoke_test_adapter/`) and dataset splits (`datasets/finetune/*.jsonl`) are strictly ignored via `.gitignore` to prevent repository bloat.
+  - Directory structure and lightweight schemas are retained in version control using `.gitkeep` placeholders (`models/finetune/.gitkeep`, `datasets/finetune/.gitkeep`) and manifest metadata (`datasets/finetune/manifest.json`).
+- **Adapter Fusion:** Merge LoRA adapter weights into the base FP16 model using `peft.PeftModel.merge_and_unload()` and export the fused model directly into `models/finetune/fused/`.
+- **GGUF Conversion & Quantization:**
+  - Convert fused HF model to GGUF format using `llama.cpp` conversion utilities (`convert_hf_to_gguf.py`) into `models/finetune/gguf/`.
+  - Quantize GGUF to `q4_K_M` (and optionally `q5_K_M` / `q8_0` for evaluation) to minimize memory and latency on Windows 11 x64, saved in `models/finetune/gguf/`.
+- **Ollama Modelfile Generation:**
+  - Create `models/finetune/Modelfile` with:
+    - Base: `FROM ./models/finetune/gguf/localdev-qwen2.5-coder-3b-q4_K_M.gguf` (strictly project directory relative).
+    - Template: ChatML prompt template matching Qwen2.5-Coder (`<|im_start|>system...<|im_end|>`).
+    - Parameters: `PARAMETER temperature 0.2`, `PARAMETER top_p 0.95`, `PARAMETER num_ctx 2048`, `PARAMETER stop "<|im_end|>"`.
+- **Local Ollama Daemon Registration:**
+  - Automated registration of the fine-tuned model into the local Ollama daemon via `ollama create localdev-qwen-coder:3b -f models/finetune/Modelfile` (or scriptable equivalent in `tools/finetune/register_ollama.py`).
+  - Verification of registration via `OllamaClient.list_models()` and `/api/tags` to ensure the tag `localdev-qwen-coder:3b` is registered and functional without internet access.
+  - End-to-end structured inference test verifying that `localdev-qwen-coder:3b` successfully returns valid JSON schema records (`DiagnosisRecord`, `EditProposalRecord`).
 
-**Not in scope:** Hosting remote model weights on external registries; proprietary quantized formats.
+**Not in scope:** Hosting remote model weights on external registries; proprietary quantized formats; storing model weights outside the project directory.
 
 **Testing:**
-- Automated script verifying GGUF file integrity and quantization accuracy.
+- Automated script verifying fused model and GGUF file integrity and quantization correctness within `models/finetune/gguf/`.
+- Git status check verifying that neither GGUF nor safetensors binary weights are tracked in git.
 - Ollama registration test verifying model shows in `ollama list` and responds on `/api/tags`.
-- Inference smoke test verifying structured generation via `OllamaClient`.
+- Inference smoke test verifying structured generation via `OllamaClient` against the registered model.
 
-**Acceptance:** Fine-tuned model is compiled to a quantized GGUF file, registered in local Ollama, and callable via `localdev`'s standard inference client.
+**Acceptance:** Fine-tuned model is saved to `models/finetune/gguf/` in the project directory, verified clean against `.gitignore`, registered into the local Ollama daemon as `localdev-qwen-coder:3b`, and callable via `localdev`'s standard inference client.
 
 ## P13-T4 — Fine-tuned model evaluation, regression benchmarking, and documentation
 
 **Status:** planned
 
-**Definition:** Benchmark the fine-tuned model against the original off-the-shelf Qwen2.5-Coder models using `localdev`'s evaluation harness (`tools/evaluate.py`), measuring schema accuracy, edit precision, evidence grounding, latency, and memory lifecycle.
+**Definition:** Benchmark the fine-tuned model (registered in local Ollama from the project directory `models/finetune/gguf/`) against the original off-the-shelf Qwen2.5-Coder models using `localdev`'s evaluation harness (`tools/evaluate.py`), measuring schema accuracy, edit precision, evidence grounding, latency, and memory lifecycle.
 
 **Files:** `tools/evaluate.py`, `docs/evaluation.md`, `docs/finetuning.md`.
 
 **In scope:**
-- Head-to-head comparison on `tests/bug_samples/` between off-the-shelf `qwen2.5-coder:3b-instruct-q4_K_M` and fine-tuned `localdev-qwen-coder:3b-q4_K_M`.
+- Head-to-head comparison on `tests/bug_samples/` between off-the-shelf `qwen2.5-coder:3b-instruct-q4_K_M` and fine-tuned `localdev-qwen-coder:3b` (registered from `models/finetune/gguf/`).
 - Metric 1: **First-attempt JSON schema validity rate** (reducing automated retries toward 0%).
 - Metric 2: **Edit proposal precision** (reduction in diff size, adherence to 1-based indexing, valid `expected_text` match rate).
 - Metric 3: **Patch pass rates** across Level A (syntax), Level B (exception eliminated), Level C (exit 0), and Level D (behavioral oracle).
 - Metric 4: **Hallucinated evidence rate** (percentage of diagnosis outputs referencing invalid evidence IDs, target: 0.0%).
 - Metric 5: **Inference latency and memory footprint** on the 8 GB / 16 GB Windows 11 target machine, verifying `keep_alive: 0` model unloading.
-- Complete documentation in `docs/finetuning.md` detailing dataset creation, QLoRA hyperparameters, quantization steps, reproduction instructions, and evaluation scorecards.
+- Complete documentation in `docs/finetuning.md` detailing dataset creation, QLoRA hyperparameters, quantization steps, project-directory filepaths, gitignore rules, Ollama registration commands, reproduction instructions, and evaluation scorecards.
 
 **Not in scope:** Modifying deterministic validation invariants (Levels A–D) to fit model quirks.
 

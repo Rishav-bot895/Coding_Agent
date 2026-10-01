@@ -1,0 +1,86 @@
+{
+  "dataset_name": "localdev-instruction-tuning",
+  "version": "1.0.0",
+  "description": "High-quality, evidence-grounded instruction-tuning corpus for local SLM code repair.",
+  "total_samples": 3800,
+  "splits": {
+    "train": {
+      "count": 3040,
+      "percentage": 80.0,
+      "file": "train.jsonl"
+    },
+    "val": {
+      "count": 380,
+      "percentage": 10.0,
+      "file": "val.jsonl"
+    },
+    "test": {
+      "count": 380,
+      "percentage": 10.0,
+      "file": "test.jsonl"
+    }
+  },
+  "task_distribution": {
+    "abstention": {
+      "count": 684,
+      "percentage": 18.0
+    },
+    "diagnosis": {
+      "count": 1558,
+      "percentage": 41.0
+    },
+    "edit_proposal": {
+      "count": 1558,
+      "percentage": 41.0
+    }
+  },
+  "category_distribution": {
+    "AttributeError": 312,
+    "IndexError": 312,
+    "KeyError": 312,
+    "NameError": 312,
+    "RecursionError": 312,
+    "SyntaxError": 310,
+    "TypeError": 312,
+    "ValueError": 312,
+    "ZeroDivisionError": 312,
+    "clean_code": 171,
+    "external_dependency": 171,
+    "logic_bug": 310,
+    "out_of_bounds": 171,
+    "prompt_budget_exceeded": 171
+  },
+  "token_statistics": {
+    "prompt_tokens": {
+      "min": 437.0,
+      "max": 705.0,
+      "mean": 587.18,
+      "median": 569.0
+    },
+    "completion_tokens": {
+      "min": 68.0,
+      "max": 141.0,
+      "mean": 101.03,
+      "median": 104.0
+    },
+    "total_tokens": {
+      "min": 511.0,
+      "max": 827.0,
+      "mean": 688.21,
+      "median": 655.0
+    },
+    "invariants": {
+      "max_allowed_prompt": 1200,
+      "max_allowed_completion": 600,
+      "max_allowed_context": 2048,
+      "violations": 0
+    }
+  },
+  "verification_summary": {
+    "schema_compliance_rate": 1.0,
+    "evidence_grounding_rate": 1.0,
+    "edit_applicability_rate": 1.0,
+    "markdown_fence_violations": 0,
+    "all_verified": true
+  }
+}

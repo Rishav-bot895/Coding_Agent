@@ -34,3 +34,23 @@ session_*
 demo/
 
 Commands.md
+
+# Fine-tuning model artifacts and binary weights (stored in project directory only)
+models/**/*.safetensors
+models/**/*.bin
+models/**/*.gguf
+models/**/*.pt
+models/**/*.pth
+models/finetune/fused/
+models/finetune/gguf/
+models/finetune/smoke_test_adapter/
+models/finetune/qlora_adapter/
+!models/.gitkeep
+!models/finetune/.gitkeep
+
+# Fine-tuning datasets (keep manifest.json and schema templates; ignore large jsonl splits)
+datasets/finetune/*.jsonl
+!datasets/.gitkeep
+!datasets/finetune/.gitkeep
+!datasets/finetune/manifest.json
+Commands.md

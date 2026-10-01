@@ -86,4 +86,5 @@ ignore = []
 [tool.ruff.lint.per-file-ignores]
 "tests/boundary_samples/*" = ["ALL"]
 "tests/bug_samples/*" = ["ALL"]
+"tools/finetune/*" = ["E501", "E402"]
 
