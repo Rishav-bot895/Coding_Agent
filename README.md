@@ -230,68 +230,211 @@ When `--json` is supplied, `localdev` emits a standard machine-readable JSON env
 
 ---
 
-## 7. Installation & Offline Configuration
+## 7. Installation & Getting Started (From Scratch)
 
-### 7.1 Prerequisites
+> [!NOTE]
+> **Fresh Windows 11 Clone Assumptions:**
+> This guide assumes you have just cloned the repository on a fresh Windows 11 x64 machine without existing development toolchains, virtual environments, or AI model daemons pre-configured.
+
+### 7.1 System Requirements
 
 - **Operating System:** Windows 11 x64 (Build 22621+ recommended).
-- **Python:** Python 3.11 or Python 3.12 (64-bit). (Minimum baseline: 3.11; tested with 3.11 and 3.12).
-- **Ruff:** Deterministic standalone linter binary (`ruff >= 0.4.8`).
-- **Ollama:** Local Ollama inference service (`>= 0.3.0`) listening on `http://127.0.0.1:11434`.
+- **Architecture:** `x86_64` (ARM64 Windows is outside MVP scope).
+- **RAM:**
+  - **8 GB RAM minimum:** Supports the lightweight 1.5B fallback model (`qwen2.5-coder:1.5b-instruct-q4_K_M` or `localdev-qwen-coder:1.5b`) with ~5.8 GB total system memory commit.
+  - **16 GB RAM recommended:** Allows running the primary 3B model (`qwen2.5-coder:3b-instruct-q4_K_M` or `localdev-qwen-coder:3b`) alongside IDEs and developer workflows.
+- **Disk Space:** ~10 GB free space (Python virtualenv, dev dependencies, and quantized SLM weights).
 
-### 7.2 Offline Ollama Model Setup
+---
 
-1. **Install Ollama for Windows:**
-   Download and install Ollama from the official installer (`OllamaSetup.exe`).
-2. **Pull the Quantized SLM Models:**
-   Prior to offline use, download the primary and fallback models:
-   ```powershell
-   # Primary Model: 3B tier (optimal reasoning on 8 GB RAM)
-   ollama pull qwen2.5-coder:3b-instruct-q4_K_M
+### 7.2 Toolchain Installation (Prerequisites)
 
-   # Fallback Model: 1.5B tier (low-memory fallback for tight RAM budgets)
-   ollama pull qwen2.5-coder:1.5b-instruct-q4_K_M
-   ```
-3. **Verify Local Endpoint:**
-   Confirm that the local daemon is running and reachable strictly on `127.0.0.1`:
-   ```powershell
-   curl.exe http://127.0.0.1:11434/api/tags
-   ```
-
-### 7.3 Repository Setup
+If you do not yet have Python, Git, or Ollama installed, you can install all three quickly using the native Windows Package Manager (`winget`):
 
 ```powershell
-# 1. Clone repository
+# 1. Install standard 64-bit Python 3.12 (with PATH automatically enabled)
+winget install Python.Python.3.12 --override "/passive PrependPath=1"
+
+# 2. Install Git for Windows
+winget install Git.Git
+
+# 3. Install Ollama for Windows (runs as a Windows background tray application)
+winget install Ollama.Ollama
+```
+
+> [!TIP]
+> **Manual Download Links:**
+> - **Python 3.12 or 3.11 (64-bit):** [python.org/downloads](https://www.python.org/downloads/) *(Ensure "Add python.exe to PATH" is checked during installation)*
+> - **Git for Windows:** [git-scm.com](https://git-scm.com/)
+> - **Ollama for Windows:** [ollama.com/download](https://ollama.com/download)
+
+---
+
+### 7.3 Step-by-Step Repository Setup
+
+#### Step 1: Configure PowerShell Script Execution Policy
+By default, Windows 11 blocks script execution under the `Restricted` policy, which prevents virtual environment activation scripts (`Activate.ps1`) from running. Open a PowerShell terminal and permit script execution for your session:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+#### Step 2: Clone and Navigate to Repository
+```powershell
 git clone https://github.com/example/Coding_Agent.git d:\Project\Coding_Agent
 cd d:\Project\Coding_Agent
+```
 
-# 2. Create clean virtual environment using Python 3.12 (or 3.11)
+#### Step 3: Create and Activate Virtual Environment
+Use Python 3.12 (or 3.11):
+
+```powershell
+# Create isolated virtual environment
 py -3.12 -m venv .venv
+
+# If 'py' launcher is unavailable, invoke python directly:
+# python -m venv .venv
+
+# Activate the virtual environment
 .\.venv\Scripts\Activate.ps1
+```
+*(Your command prompt will display `(.venv)` once activated).*
 
-# 3. Upgrade pip and install package in editable mode with development dependencies
-python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"
+#### Step 4: Install Dependencies & Editable Package
+Upgrade packaging tools and install `localdev` with all development, test, and evaluation dependencies:
 
-# 4. Verify CLI installation
+```powershell
+# Upgrade pip, wheel, and setuptools
+python -m pip install --upgrade pip setuptools wheel
+
+# Install localdev in editable mode with development tools
+pip install -e ".[dev]"
+```
+
+This installs:
+- **Core Runtime:** [`pydantic`](https://docs.pydantic.dev/) (schemas), [`psutil`](https://psutil.readthedocs.io/) (process tree RSS accounting), [`ruff`](https://docs.astral.sh/ruff/) (isolated AST linting), [`httpx`](https://www.python-httpx.org/) (Ollama client).
+- **Development & Testing:** `pytest`, `pytest-mock`, `mypy`.
+- **Evaluation & SLM Tooling:** `torch`, `transformers`, `peft`, `datasets`.
+
+---
+
+### 7.4 Ollama Service Configuration & Model Registration
+
+`localdev` operates entirely offline using local Small Language Models (SLMs) served via Ollama over `http://127.0.0.1:11434`.
+
+#### Step 1: Ensure Ollama Daemon is Running
+The Ollama installer automatically runs an icon in your Windows system tray. If the daemon is not running, launch it from the Windows Start menu or run in a separate terminal:
+
+```powershell
+ollama serve
+```
+
+#### Step 2 (Optional): Configure Custom Model Storage Location
+By default, Ollama stores model weights in `C:\Users\<username>\.ollama\models`. If your primary drive `C:` has limited capacity and you wish to store models on another drive (e.g., `D:\OllamaModels`), set the `OLLAMA_MODELS` environment variable:
+
+```powershell
+# Set persistently for your Windows user profile:
+[Environment]::SetEnvironmentVariable("OLLAMA_MODELS", "D:\OllamaModels", "User")
+
+# Set for your active PowerShell session:
+$env:OLLAMA_MODELS = "D:\OllamaModels"
+```
+> [!IMPORTANT]
+> If Ollama is already running in your system tray, right-click the Ollama tray icon, select **Quit Ollama**, and restart it for the new model storage path to take effect.
+
+Verify the local daemon is reachable:
+```powershell
+curl.exe http://127.0.0.1:11434/api/tags
+```
+
+#### Step 3: Pull Base Quantized Models
+Download the official quantized base models from the Ollama library:
+
+```powershell
+# Primary 3B base model (~1.9 GB download)
+ollama pull qwen2.5-coder:3b-instruct-q4_K_M
+
+# Fallback 1.5B base model (~986 MB download, for 8 GB RAM budgets)
+ollama pull qwen2.5-coder:1.5b-instruct-q4_K_M
+```
+
+#### Step 4: Register Domain-Specific Fine-Tuned Models
+The repository includes pre-configured Modelfiles in [`models/finetune/`](file:///d:/Project/Coding_Agent/models/finetune/) with domain-specific system prompts, repair schemas, and deterministic sampling parameters. Register them in your local Ollama daemon:
+
+```powershell
+# Register the primary 3B domain SLM (takes < 1s, reuses cached base layers)
+ollama create localdev-qwen-coder:3b -f models/finetune/Modelfile
+
+# Register the fallback 1.5B domain SLM
+ollama create localdev-qwen-coder:1.5b -f models/finetune/Modelfile.1.5b
+```
+
+#### Step 5: Verify Model Registration
+List all registered models:
+
+```powershell
+ollama list
+```
+
+Expected output:
+```text
+NAME                                  ID              SIZE      MODIFIED
+localdev-qwen-coder:3b                ...             1.9 GB    ...
+localdev-qwen-coder:1.5b              ...             986 MB    ...
+qwen2.5-coder:3b-instruct-q4_K_M      ...             1.9 GB    ...
+qwen2.5-coder:1.5b-instruct-q4_K_M    ...             986 MB    ...
+```
+
+---
+
+### 7.5 Verification & Smoke Testing
+
+Confirm your setup by running the following health checks:
+
+#### 1. Verify CLI Interface
+```powershell
 localdev --version
 localdev --help
 ```
 
-### 7.4 Running Quality and Verification Suites
-
+#### 2. Test Single-Target Inspection & Analysis
+Run deterministic static analysis against an included sample without modifying files:
 ```powershell
-# Run the complete automated test suite (780+ unit and integration tests)
-python -m pytest -q
+# Inspect file metadata (SHA-256, encoding, newlines, line count)
+localdev info tests/bug_samples/initial/01_index_error.py
 
-# Run native Windows API tests (Job Objects, ReplaceFileW, volume checks)
-python -m pytest -m windows
+# Run deterministic AST and Ruff static lint analysis
+localdev analyse tests/bug_samples/initial/01_index_error.py
+```
 
-# Run strict Mypy static type checking
-python -m mypy --strict localdev
+#### 3. Test Runtime Execution & SLM Diagnosis
+Execute the target script under controlled limits (`-E -B -P`) and obtain an evidence-grounded diagnosis:
+```powershell
+localdev debug tests/bug_samples/initial/01_index_error.py --diagnose
+```
 
-# Run Ruff linter in isolated mode (zero cache pollution)
-ruff check --isolated --no-cache .
+#### 4. Test Automated Repair Proposal & Validation
+Generate a structured patch and validate it against Level A–D criteria without altering the disk:
+```powershell
+localdev fix tests/bug_samples/initial/01_index_error.py --propose-only
+```
+
+#### 5. Run Automated Test Suite
+```powershell
+# Run the fast unit test suite (616 tests)
+python -m pytest tests/unit/ -q
+
+# Run native Windows API tests (Windows Job Objects, ReplaceFileW, staging)
+python -m pytest -m windows -q
+```
+
+#### 6. Run Benchmark Evaluation Harness
+```powershell
+# Fast benchmark run across evaluation bug samples
+python tools/evaluate.py --fast
+
+# Benchmark using the registered 3B domain model
+python tools/evaluate.py --model localdev-qwen-coder:3b --fast
 ```
 
 ---
@@ -302,13 +445,24 @@ ruff check --isolated --no-cache .
 localdev/
 ├── pyproject.toml              # PEP 518/621 package metadata and pinned dependencies
 ├── README.md                   # Complete user guide, safety boundaries, and CLI reference
-├── LICENSE                     # MIT License
 ├── plan.md                     # Comprehensive phase-by-phase implementation plan
+├── results.md                  # Benchmark results, 703 test statistics & model scorecards
+├── LICENSE                     # MIT License
 ├── docs/
 │   ├── architecture.md         # Detailed architectural blueprint & invariants
 │   ├── security.md             # Threat model, isolation contract & boundaries
 │   ├── evaluation.md           # Benchmark methodology, datasets & 8 GB budget report
+│   ├── finetuning.md           # LoRA fine-tuning pipeline, schemas & Ollama packaging
 │   └── demo.md                 # 4-part release demonstration script & narrative
+├── models/
+│   └── finetune/               # Domain-specific Modelfiles and LoRA adapters
+│       ├── Modelfile           # Ollama Modelfile for localdev-qwen-coder:3b
+│       └── Modelfile.1.5b      # Ollama Modelfile for localdev-qwen-coder:1.5b
+├── tools/
+│   ├── evaluate.py             # Empirical benchmark & evaluation harness
+│   ├── build_manifests.py      # Automated fixture manifest generator
+│   └── finetune/               # Dataset preparation, training & GGUF export scripts
+├── datasets/                   # Synthetic and curated fine-tuning training pairs
 ├── localdev/
 │   ├── __init__.py             # Package version and docstrings
 │   ├── cli.py                  # CLI argument parsing and command routing
@@ -333,3 +487,17 @@ localdev/
     ├── profiling_samples/      # 17 profiling benchmark fixtures with inputs
     └── boundary_samples/       # Path, Unicode, symlink, and resource boundary fixtures
 ```
+
+---
+
+## 9. Documentation Index
+
+For in-depth technical documentation, refer to the accompanying guides:
+
+- **Architectural Specification:** [`docs/architecture.md`](file:///d:/Project/Coding_Agent/docs/architecture.md) — Subprocess containment, Windows Job Objects, `ReplaceFileW` atomic staging, and memory accounting.
+- **Security & Threat Model:** [`docs/security.md`](file:///d:/Project/Coding_Agent/docs/security.md) — Non-sandbox trust boundary, execution flags (`-E -B -P`), prompt injection defenses, and safe path resolution.
+- **Evaluation & Benchmarks:** [`docs/evaluation.md`](file:///d:/Project/Coding_Agent/docs/evaluation.md) — Empirical methodology, 8 GB RAM budget compliance, and regression datasets.
+- **Model Fine-Tuning Pipeline:** [`docs/finetuning.md`](file:///d:/Project/Coding_Agent/docs/finetuning.md) — QLoRA adapter training, dataset schema validation, GGUF export, and Ollama packaging.
+- **Empirical Scorecards & Statistics:** [`results.md`](file:///d:/Project/Coding_Agent/results.md) — Head-to-head scorecards across 703 test samples comparing base vs fine-tuned 3B and 1.5B tiers.
+- **Release Walkthrough & Demo:** [`docs/demo.md`](file:///d:/Project/Coding_Agent/docs/demo.md) — 4-part release script showcasing real-world debugging, repair, complexity analysis, and hot-process profiling.
+
