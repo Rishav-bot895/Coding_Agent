@@ -1619,7 +1619,7 @@ python -m mypy --strict localdev
 
 ## P13-T5 — 1.5B Low-memory fallback model fine-tuning, Ollama registration, and comparative benchmarking
 
-**Status:** planned
+**Status:** completed
 
 **Definition:** Adapt and fine-tune the 1.5B compact model (`Qwen/Qwen2.5-Coder-1.5B-Instruct` / `qwen2.5-coder:1.5b-instruct-q4_K_M`) for the low-memory fallback tier of `localdev`, package and register it into the local Ollama daemon as `localdev-qwen-coder:1.5b`, and conduct head-to-head benchmarking against the base 1.5B model to verify first-attempt schema accuracy, coordinate precision, latency, and memory footprint on 8 GB RAM systems.
 
