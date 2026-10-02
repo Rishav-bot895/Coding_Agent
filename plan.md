@@ -1623,7 +1623,7 @@ python -m mypy --strict localdev
 
 **Definition:** Adapt and fine-tune the 1.5B compact model (`Qwen/Qwen2.5-Coder-1.5B-Instruct` / `qwen2.5-coder:1.5b-instruct-q4_K_M`) for the low-memory fallback tier of `localdev`, package and register it into the local Ollama daemon as `localdev-qwen-coder:1.5b`, and conduct head-to-head benchmarking against the base 1.5B model to verify first-attempt schema accuracy, coordinate precision, latency, and memory footprint on 8 GB RAM systems.
 
-**Files:** `models/finetune/Modelfile.1.5b`, `tools/finetune/register_ollama.py`, `tools/evaluate.py`, `docs/finetuning.md`, `docs/evaluation.md`, `results.md`, `plan.md`.
+**Files:** `models/finetune/Modelfile.1.5b`, `tools/finetune/register_ollama.py`, `tools/evaluate.py`, `docs/finetuning.md`, `docs/evaluation.md`, `plan.md`.
 
 **In scope:**
 - **Ollama Modelfile Configuration (`models/finetune/Modelfile.1.5b`):**
@@ -1641,7 +1641,7 @@ python -m mypy --strict localdev
   - Metric 4: **Hallucinated evidence rate** (strictly citing verified evidence IDs from manifest, target: 0.0%).
   - Metric 5: **Inference latency and memory footprint** on the 8 GB Windows 11 target machine, verifying ~1.15 GB RSS footprint, ~54 tokens/sec throughput, and clean `keep_alive: 0` model unloading.
 - **Documentation & Scorecards:**
-  - Document comparative scorecards, memory profiles, and fallback tier recommendations in `docs/evaluation.md`, `docs/finetuning.md`, and `results.md`.
+  - Document comparative scorecards, memory profiles, and fallback tier recommendations in `docs/evaluation.md` and `docs/finetuning.md`.
 
 **Not in scope:** Modifying deterministic validation invariants (Levels A–D) or increasing prompt/output token budgets beyond 1,200/600.
 
@@ -1650,7 +1650,7 @@ python -m mypy --strict localdev
 - Run automated unit tests verifying registration and structured generation for the 1.5B model.
 - Verify memory release and 0 lingering worker processes upon completion.
 
-**Acceptance:** The fine-tuned 1.5B model is registered into local Ollama as `localdev-qwen-coder:1.5b`, passes structured inference smoke testing with 0 schema errors, demonstrates measurable improvements in first-attempt schema compliance and edit precision over base 1.5B, and is fully documented in `docs/finetuning.md` and `results.md`.
+**Acceptance:** The fine-tuned 1.5B model is registered into local Ollama as `localdev-qwen-coder:1.5b`, passes structured inference smoke testing with 0 schema errors, demonstrates measurable improvements in first-attempt schema compliance and edit precision over base 1.5B, and is fully documented in `docs/finetuning.md` and `docs/evaluation.md`.
 
 ---
 

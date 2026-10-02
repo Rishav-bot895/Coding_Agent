@@ -446,12 +446,11 @@ localdev/
 ├── pyproject.toml              # PEP 518/621 package metadata and pinned dependencies
 ├── README.md                   # Complete user guide, safety boundaries, and CLI reference
 ├── plan.md                     # Comprehensive phase-by-phase implementation plan
-├── results.md                  # Benchmark results, 703 test statistics & model scorecards
 ├── LICENSE                     # MIT License
 ├── docs/
 │   ├── architecture.md         # Detailed architectural blueprint & invariants
 │   ├── security.md             # Threat model, isolation contract & boundaries
-│   ├── evaluation.md           # Benchmark methodology, datasets & 8 GB budget report
+│   ├── evaluation.md           # Benchmark methodology, 703 test statistics & model scorecards
 │   ├── finetuning.md           # LoRA fine-tuning pipeline, schemas & Ollama packaging
 │   └── demo.md                 # 4-part release demonstration script & narrative
 ├── models/
@@ -496,8 +495,8 @@ For in-depth technical documentation, refer to the accompanying guides:
 
 - **Architectural Specification:** [`docs/architecture.md`](file:///d:/Project/Coding_Agent/docs/architecture.md) — Subprocess containment, Windows Job Objects, `ReplaceFileW` atomic staging, and memory accounting.
 - **Security & Threat Model:** [`docs/security.md`](file:///d:/Project/Coding_Agent/docs/security.md) — Non-sandbox trust boundary, execution flags (`-E -B -P`), prompt injection defenses, and safe path resolution.
-- **Evaluation & Benchmarks:** [`docs/evaluation.md`](file:///d:/Project/Coding_Agent/docs/evaluation.md) — Empirical methodology, 8 GB RAM budget compliance, and regression datasets.
+- **Evaluation, Benchmarks & Scorecards:** [`docs/evaluation.md`](file:///d:/Project/Coding_Agent/docs/evaluation.md) — Empirical methodology, 8 GB RAM budget compliance, 703 regression statistics, and head-to-head scorecards for 3B and 1.5B tiers.
 - **Model Fine-Tuning Pipeline:** [`docs/finetuning.md`](file:///d:/Project/Coding_Agent/docs/finetuning.md) — QLoRA adapter training, dataset schema validation, GGUF export, and Ollama packaging.
-- **Empirical Scorecards & Statistics:** [`results.md`](file:///d:/Project/Coding_Agent/results.md) — Head-to-head scorecards across 703 test samples comparing base vs fine-tuned 3B and 1.5B tiers.
 - **Release Walkthrough & Demo:** [`docs/demo.md`](file:///d:/Project/Coding_Agent/docs/demo.md) — 4-part release script showcasing real-world debugging, repair, complexity analysis, and hot-process profiling.
+
 

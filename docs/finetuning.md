@@ -643,6 +643,7 @@ python tools/evaluate.py --compare-models qwen2.5-coder:3b-instruct-q4_K_M local
 | **P13-T2** | QLoRA training pipeline and reproducible recipe | 4-bit NF4 QLoRA script targeting all linear projections; completion-only loss masking; validated convergence and adapter checkpointing. | **COMPLETED** |
 | **P13-T3** | LoRA fusion, GGUF quantization, and local Ollama packaging | Project-local storage in `models/finetune/`; strict `.gitignore` exclusion; fused 16-bit model; `q4_K_M` GGUF quantization; ChatML `Modelfile`; local Ollama registration as `localdev-qwen-coder:3b`. | **COMPLETED** |
 | **P13-T4** | Fine-tuned model evaluation, regression benchmarking, and documentation | Automated evaluation harness in `tools/evaluate.py`; head-to-head scorecard across 5 core metrics; zero process leaks; memory release via `keep_alive: 0`; complete documentation in `docs/evaluation.md` and `docs/finetuning.md`. | **COMPLETED** |
-| **P13-T5** | 1.5B Low-memory fallback model fine-tuning, Ollama registration, and comparative benchmarking | 1.5B Modelfile configuration (`localdev-qwen-coder:1.5b`); local Ollama registration; head-to-head benchmarking against base 1.5B; 5 core metrics scorecard; documentation in `results.md` and `docs/finetuning.md`. | **COMPLETED** |
+| **P13-T5** | 1.5B Low-memory fallback model fine-tuning, Ollama registration, and comparative benchmarking | 1.5B Modelfile configuration (`localdev-qwen-coder:1.5b`); local Ollama registration; head-to-head benchmarking against base 1.5B; 5 core metrics scorecard; documentation in `docs/evaluation.md` and `docs/finetuning.md`. | **COMPLETED** |
+
 
 
