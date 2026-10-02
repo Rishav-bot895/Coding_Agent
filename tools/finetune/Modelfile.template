@@ -1,0 +1,24 @@
+# Ollama Modelfile Template for localdev Fine-Tuned Models (Phase 13 Task P13-T3)
+# Points directly to the project-directory GGUF artifact.
+FROM {{ model_path }}
+
+# ChatML prompt template matching Qwen2.5-Coder specification
+TEMPLATE """{{ if .System }}<|im_start|>system
+{{ .System }}<|im_end|>
+{{ end }}{{ if .Prompt }}<|im_start|>user
+{{ .Prompt }}<|im_end|>
+{{ end }}<|im_start|>assistant
+{{ .Response }}<|im_end|>
+"""
+
+# Runtime inference parameters strictly conforming to localdev contracts:
+# - num_ctx: 2048 (enforces hard context window)
+# - temperature: 0.2 (low variance for deterministic schema adherence)
+# - top_p: 0.95
+# - stop tokens: ChatML end tags
+PARAMETER temperature 0.2
+PARAMETER top_p 0.95
+PARAMETER num_ctx 2048
+PARAMETER stop "<|im_end|>"
+PARAMETER stop "<|endoftext|>"
+

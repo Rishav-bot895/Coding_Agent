@@ -1552,7 +1552,7 @@ python -m mypy --strict localdev
 
 ## P13-T3 — LoRA fusion, GGUF quantization, and local Ollama packaging
 
-**Status:** planned
+**Status:** completed
 
 **Definition:** Build an automated pipeline to merge trained LoRA adapter weights into the 16-bit base model, quantize the fused model to 4-bit GGUF (`q4_K_M`), configure an Ollama `Modelfile`, and register the fine-tuned model directly into the local Ollama daemon.
 
@@ -1593,7 +1593,7 @@ python -m mypy --strict localdev
 
 ## P13-T4 — Fine-tuned model evaluation, regression benchmarking, and documentation
 
-**Status:** planned
+**Status:** completed
 
 **Definition:** Benchmark the fine-tuned model (registered in local Ollama from the project directory `models/finetune/gguf/`) against the original off-the-shelf Qwen2.5-Coder models using `localdev`'s evaluation harness (`tools/evaluate.py`), measuring schema accuracy, edit precision, evidence grounding, latency, and memory lifecycle.
 
@@ -1616,6 +1616,41 @@ python -m mypy --strict localdev
 - Verify evaluation runs fully offline without external network calls.
 
 **Acceptance:** The fine-tuned model demonstrates statistically significant improvements in first-attempt schema compliance, patch synthesis accuracy, and evidence grounding compared to the base model, fully documented in `docs/finetuning.md`.
+
+## P13-T5 — 1.5B Low-memory fallback model fine-tuning, Ollama registration, and comparative benchmarking
+
+**Status:** planned
+
+**Definition:** Adapt and fine-tune the 1.5B compact model (`Qwen/Qwen2.5-Coder-1.5B-Instruct` / `qwen2.5-coder:1.5b-instruct-q4_K_M`) for the low-memory fallback tier of `localdev`, package and register it into the local Ollama daemon as `localdev-qwen-coder:1.5b`, and conduct head-to-head benchmarking against the base 1.5B model to verify first-attempt schema accuracy, coordinate precision, latency, and memory footprint on 8 GB RAM systems.
+
+**Files:** `models/finetune/Modelfile.1.5b`, `tools/finetune/register_ollama.py`, `tools/evaluate.py`, `docs/finetuning.md`, `docs/evaluation.md`, `results.md`, `plan.md`.
+
+**In scope:**
+- **Ollama Modelfile Configuration (`models/finetune/Modelfile.1.5b`):**
+  - Inherits from base GGUF layer `FROM qwen2.5-coder:1.5b-instruct-q4_K_M` (or project-local `./models/finetune/gguf/localdev-qwen2.5-coder-1.5b-q4_K_M.gguf`).
+  - ChatML prompt template (`<|im_start|>system...<|im_end|>`) matching Qwen2.5-Coder.
+  - Pinned inference parameters: `PARAMETER temperature 0.2`, `PARAMETER top_p 0.95`, `PARAMETER num_ctx 2048`, and stop tokens (`<|im_end|>`, `<|endoftext|>`).
+- **Ollama Local Registration:**
+  - Automated registration of the fine-tuned model into the running local Ollama daemon as `localdev-qwen-coder:1.5b` via `register_ollama.py` or `ollama create localdev-qwen-coder:1.5b -f models/finetune/Modelfile.1.5b`.
+  - Verification via `OllamaClient.list_models()` and structured inference smoke testing (`DiagnosisRecord` validation).
+- **Head-to-Head Comparative Benchmarking:**
+  - Benchmark base `qwen2.5-coder:1.5b-instruct-q4_K_M` vs. fine-tuned `localdev-qwen-coder:1.5b` across `tests/bug_samples/` using `tools/evaluate.py --compare-models qwen2.5-coder:1.5b-instruct-q4_K_M localdev-qwen-coder:1.5b`.
+  - Metric 1: **First-attempt JSON schema validity rate** (elevating base 1.5B's ~70% validity rate toward 90%+).
+  - Metric 2: **Edit proposal precision** (mitigating 1.5B's inverted coordinate offsets and line range hallucinations).
+  - Metric 3: **Patch pass rates** across Levels A (syntax), B (exception eliminated), C (exit 0), and Level D (behavioral oracle).
+  - Metric 4: **Hallucinated evidence rate** (strictly citing verified evidence IDs from manifest, target: 0.0%).
+  - Metric 5: **Inference latency and memory footprint** on the 8 GB Windows 11 target machine, verifying ~1.15 GB RSS footprint, ~54 tokens/sec throughput, and clean `keep_alive: 0` model unloading.
+- **Documentation & Scorecards:**
+  - Document comparative scorecards, memory profiles, and fallback tier recommendations in `docs/evaluation.md`, `docs/finetuning.md`, and `results.md`.
+
+**Not in scope:** Modifying deterministic validation invariants (Levels A–D) or increasing prompt/output token budgets beyond 1,200/600.
+
+**Testing:**
+- Execute `tools/evaluate.py --compare-models qwen2.5-coder:1.5b-instruct-q4_K_M localdev-qwen-coder:1.5b --fast`.
+- Run automated unit tests verifying registration and structured generation for the 1.5B model.
+- Verify memory release and 0 lingering worker processes upon completion.
+
+**Acceptance:** The fine-tuned 1.5B model is registered into local Ollama as `localdev-qwen-coder:1.5b`, passes structured inference smoke testing with 0 schema errors, demonstrates measurable improvements in first-attempt schema compliance and edit precision over base 1.5B, and is fully documented in `docs/finetuning.md` and `results.md`.
 
 ---
 

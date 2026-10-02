@@ -44,6 +44,7 @@ models/**/*.pth
 models/finetune/fused/
 models/finetune/gguf/
 models/finetune/smoke_test_adapter/
+models/finetune/smoke_export/
 models/finetune/qlora_adapter/
 !models/.gitkeep
 !models/finetune/.gitkeep
